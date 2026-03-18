@@ -49,7 +49,7 @@ def root():
 
 @app.get("/noticias")
 async def get_noticias(fecha: str = Query(..., description="Fecha en formato YYYY-MM-DD")):
-    url = f"https://prensa.rionegro.gov.ar/busqueda/articulo?q=&t=&d={fecha}"
+    url = "https://prensa.rionegro.gov.ar/busqueda/articulo?q="
     articles = []
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
         try:
