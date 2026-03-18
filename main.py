@@ -7,28 +7,28 @@ import os
 import json
 import re
 from bs4 import BeautifulSoup
-
+ 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
+ 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")  # opcional, gratis en pexels.com/api
-
+ 
 SYSTEM_PROMPT = """Actuá como editor jefe digital patagónico y estratega SEO de Diario ENE, medio regional con base en Bariloche y foco en Río Negro y la Patagonia. Tu tarea es crear un artículo periodístico optimizado al máximo nivel profesional, generando un texto original y natural.
-
+ 
 ESTILO DIARIO ENE:
 - Título directo, sin vueltas
 - Urgencia funcional, no exagerada
 - Foco en lo que pasa y por qué importa
 - Lenguaje claro, sobrio, cero adjetivos grandilocuentes
 - Pensado para el lector patagónico, no para gacetilla
-
+ 
 Evitar siempre: "en el marco de", "con el objetivo de", "se llevó a cabo", estructuras simétricas y repetitivas, párrafos de longitud idéntica en serie.
-
+ 
 Redacción humana y natural: variá la longitud de los párrafos, incluí observaciones editoriales propias, usá datos específicos locales, las citas deben estar destacadas dentro del desarrollo.
-
+ 
 Texto enriquecido: Negrita para nombres propios relevantes, datos numéricos, keywords SEO principales y frases de alto impacto. Cursiva para marcas, términos técnicos o palabras en otro idioma. Máx 15-20% del texto.
-
+ 
 ESTRUCTURA OBLIGATORIA DEL JSON:
 - volanta: máx 3 palabras (topónimos no cuentan). Dos estilos: Causa+consecuencia O Lugar+situación. Nunca un sustantivo suelto.
 - titulo: máx 80 caracteres
@@ -36,22 +36,22 @@ ESTRUCTURA OBLIGATORIA DEL JSON:
 - desarrollo: 500-800 palabras. OBLIGATORIO incluir subtítulos <h3> cada 4-5 párrafos. Primer párrafo amplía el quién y el marco sin repetir el copete. Incluir citas destacadas con <blockquote>.
 - interlinking: OBLIGATORIO entre 2 y 4 oportunidades. Jerarquía: 1) nota pilar de sección, 2) notas de profundidad, 3) sección temática. Cada uno con frase sugerida y destino.
 - revision: 5 checks obligatorios: sin_estructura_identica, sin_expresiones_genericas, variacion_ritmo, dato_local_especifico, lectura_humana. Cada uno true/false + observacion si es false.
-
+ 
 RESPONDÉ SOLO con JSON válido sin markdown:
 {"seccion":"","kw_principal":"","kw_secundarias":["","","","",""],"kw_longtail":["","",""],"tipo_guia":false,"etiquetas":["","","",""],"etiqueta_sugerida":null,"volanta":"","titulo":"","copete":"","desarrollo":"","bloque_guia":null,"interlinking":[{"frase":"","destino":"","jerarquia":""}],"micro_seo":"","rrss":{"instagram":"","twitter":"","facebook":""},"titulos":[{"tipo":"Informativo puro","texto":""},{"tipo":"Informativo puro","texto":""},{"tipo":"Impacto periodístico","texto":""},{"tipo":"Impacto periodístico","texto":""},{"tipo":"Explicativo / Contexto","texto":""},{"tipo":"Explicativo / Contexto","texto":""},{"tipo":"Híbrido estratégico","texto":""}],"titulo_recomendado_index":0,"titulo_recomendado_razon":"","meta_title":"","meta_description":"","slug":"","revision":{"sin_estructura_identica":true,"sin_expresiones_genericas":true,"variacion_ritmo":true,"dato_local_especifico":true,"lectura_humana":true,"observaciones":""},"portada":"","horario":""}"""
-
+ 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9",
 }
-
+ 
 SOURCES = {
     "prensa":    {"name":"Prensa Río Negro",  "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar", "pattern":"/articulo/"},
-    "bariloche": {"name":"Bariloche Informa", "url":"https://barilocheinforma.gob.ar",                     "base":"https://barilocheinforma.gob.ar","pattern":None},
+    "bariloche": {"name":"Bariloche Informa", "url":"https://barilocheinforma.gob.ar/noticias/",            "base":"https://barilocheinforma.gob.ar","pattern":"barilocheinforma.gob.ar/"},
     "policia":   {"name":"Policía Río Negro", "url":"https://policia.rionegro.gov.ar",                     "base":"https://policia.rionegro.gov.ar","pattern":None},
 }
-
+ 
 HTML = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -75,7 +75,7 @@ header{background:var(--ink);border-bottom:3px solid var(--blue);padding:10px 24
 .wrap{max-width:1300px;margin:0 auto;padding:0 24px 48px;}
 .panel{display:none;background:#fff;border:1px solid var(--border);border-radius:0 var(--r) var(--r) var(--r);padding:24px;}
 .panel.on{display:block;}
-
+ 
 /* PORTAL */
 .src-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px;}
 .src-chip{display:flex;align-items:center;gap:6px;padding:6px 14px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--paper);user-select:none;}
@@ -101,7 +101,7 @@ header{background:var(--ink);border-bottom:3px solid var(--blue);padding:10px 24
 .sel-info b{color:var(--blue2);}
 .skl{background:linear-gradient(90deg,var(--paper2) 25%,var(--paper3) 50%,var(--paper2) 75%);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:var(--r);height:90px;}
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
+ 
 /* REDACTOR */
 .gen-layout{display:grid;grid-template-columns:280px 1fr;gap:24px;}
 .sub-tabs{display:flex;gap:4px;margin-bottom:14px;}
@@ -136,7 +136,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
 @keyframes spin{to{transform:rotate(360deg)}}
 .err{background:#fde8e3;border:1px solid #f5b8b0;border-radius:var(--r);padding:10px 14px;font-size:12px;color:#c83030;margin-top:10px;display:none;}
 .err.on{display:block;}
-
+ 
 /* OUTPUT con TABS de notas */
 .out{min-height:400px;}
 .empty{text-align:center;padding:60px 20px;color:var(--ink3);}
@@ -151,7 +151,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
 .note-panel{display:none;border:1px solid var(--border);border-radius:0 var(--r) var(--r) var(--r);padding:0;animation:fi .3s ease;}
 .note-panel.on{display:block;}
 @keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-
+ 
 /* Fotos */
 .photos-row{display:flex;gap:10px;padding:16px;background:var(--paper2);border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .photo-card{border:2px solid transparent;border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .15s;flex:0 0 auto;}
@@ -161,7 +161,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
 .photo-card.main-photo img{width:160px;height:100px;}
 .photo-label{font-size:9px;padding:3px 6px;background:rgba(0,0,0,.5);color:#fff;text-align:center;}
 .photos-lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);margin-right:8px;display:flex;align-items:center;align-self:center;}
-
+ 
 /* Secciones de output */
 .sec{border-bottom:1px solid var(--border);}
 .sec:last-child{border-bottom:none;}
@@ -222,7 +222,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
   <div class="main-tab" id="mt1" onclick="goMain(1)">✍️ Redactar notas ENE</div>
 </div>
 <div class="wrap">
-
+ 
   <!-- PANEL A: PORTALES -->
   <div class="panel on" id="pa">
     <p style="font-size:13px;color:var(--ink2);margin-bottom:16px;">Seleccioná las fuentes, cargá las noticias y elegí las que querés redactar.</p>
@@ -241,7 +241,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
       </div>
     </div>
   </div>
-
+ 
   <!-- PANEL B: REDACTOR -->
   <div class="panel" id="pb">
     <div class="gen-layout">
@@ -251,7 +251,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
           <div class="sub-tab" id="st1" onclick="goSub(1)">🔗 URL(s)</div>
           <div class="sub-tab" id="st2" onclick="goSub(2)">📌 Portal</div>
         </div>
-
+ 
         <!-- Texto -->
         <div class="sub-panel on" id="sp0">
           <textarea id="texto-input" placeholder="Pegá la gacetilla, comunicado o texto de WhatsApp..."></textarea>
@@ -259,7 +259,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
           <div id="cola-preview" class="prev-list" style="display:none"></div>
           <button class="btn-sec" id="btn-clear-cola" onclick="clearCola()" style="width:100%;display:none">Limpiar cola</button>
         </div>
-
+ 
         <!-- URLs múltiples -->
         <div class="sub-panel" id="sp1">
           <textarea id="url-input" placeholder="Pegá una o más URLs (una por línea):&#10;https://prensa.rionegro.gov.ar/articulo/...&#10;https://prensa.rionegro.gov.ar/articulo/..." style="min-height:100px;"></textarea>
@@ -269,19 +269,19 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
           </button>
           <div id="url-cola-preview" class="prev-list" style="margin-top:8px;display:none"></div>
         </div>
-
+ 
         <!-- Del portal -->
         <div class="sub-panel" id="sp2">
           <div id="portal-prev" class="prev-list">
             <p style="font-size:12px;color:var(--ink3);">Cargá noticias en el panel anterior y pasalas acá.</p>
           </div>
         </div>
-
+ 
         <div style="margin-top:12px">
           <div class="slbl">Cola de notas (<span id="cola-count">0</span>)</div>
           <div id="main-cola" class="prev-list"></div>
         </div>
-
+ 
         <div class="slbl">Opciones</div>
         <div class="opts">
           <div class="opt"><label>Sección</label>
@@ -314,7 +314,7 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
         <div class="err" id="err"></div>
         <button class="btn-sec" onclick="goMain(0)" style="width:100%;margin-top:8px;text-align:center;">← Volver a noticias</button>
       </div>
-
+ 
       <!-- OUTPUT CON TABS -->
       <div class="out">
         <div class="empty" id="empty">
@@ -331,25 +331,25 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
     </div>
   </div>
 </div>
-
+ 
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
+ 
 // ── ESTADO ──
 let portalArticles = [], portalSelected = new Set();
 let cola = []; // [{id, title, text, url, photo}]
 let noteResults = []; // resultados generados
 let busy = false;
 let activeNoteTab = 0;
-
+ 
 // ── NAV ──
 function goMain(n){ $('mt0').classList.toggle('on',n===0); $('mt1').classList.toggle('on',n===1); $('pa').classList.toggle('on',n===0); $('pb').classList.toggle('on',n===1); }
 function goSub(n){ [0,1,2].forEach(i=>{ $('st'+i).classList.toggle('on',i===n); $('sp'+i).classList.toggle('on',i===n); }); }
 function tChip(inp,id){ $(id).classList.toggle('on',inp.checked); }
 function toggleSrc(inp,id){ $(id).classList.toggle('on',inp.checked); }
 function st(t){ $('hst').textContent=t; }
-
+ 
 // ── PORTAL ──
 async function loadNews(){
   const checks=[...$('pa').querySelectorAll('.src-chip input:checked')].map(i=>i.value);
@@ -386,7 +386,7 @@ function passToRedactor(){
   $('portal-prev').innerHTML=arts.map(a=>`<div class="prev-item"><small>${esc(a.source)}</small>${esc(a.title.slice(0,80))}…</div>`).join('');
   renderCola(); goMain(1); goSub(2);
 }
-
+ 
 // ── COLA ──
 function addFromTexto(){
   const t=$('texto-input').value.trim();
@@ -427,7 +427,7 @@ function renderCola(){
     </div>`).join('');
   $('btn-clear-cola').style.display='block';
 }
-
+ 
 // ── GENERAR TODAS ──
 async function generateAll(){
   if(busy){ return; }
@@ -436,17 +436,17 @@ async function generateAll(){
   $('empty').style.display='none';
   $('notes-area').style.display='block';
   noteResults=[];
-
+ 
   // Crear tabs placeholder
   const tabsEl=$('note-tabs');
   const panelsEl=$('note-panels');
   tabsEl.innerHTML='';
   panelsEl.innerHTML='';
-
+ 
   const seccion=$('sec-ov').value;
   const tono=$('tone').value;
   const extras={ rrss:$('ch-rrss').querySelector('input').checked, micro_seo:$('ch-seo').querySelector('input').checked };
-
+ 
   for(let i=0;i<cola.length;i++){
     const item=cola[i];
     // Tab
@@ -462,7 +462,7 @@ async function generateAll(){
     panel.innerHTML=`<div class="generating-placeholder"><div class="gen-spin"></div><p>Generando nota ${i+1}...</p></div>`;
     panelsEl.appendChild(panel);
   }
-
+ 
   // Generar en paralelo
   const promises=cola.map(async (item,i)=>{
     try{
@@ -482,7 +482,7 @@ async function generateAll(){
       const photosResp=await fetch(`/fotos?q=${encodeURIComponent(kw)}`);
       const photosData=await photosResp.json();
       const extraPhotos=photosData.photos||[];
-
+ 
       const r=await fetch('/generar',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -503,7 +503,7 @@ async function generateAll(){
       $(`ntab-${i}`).querySelector('.note-tab-status').style.color='#c83030';
     }
   });
-
+ 
   await Promise.all(promises);
   busy=false; setLoad(false);
   st('Listo — '+cola.length+' nota(s) generada(s)');
@@ -511,22 +511,22 @@ async function generateAll(){
   cola=[];
   renderCola();
 }
-
+ 
 function switchNoteTab(n){
   document.querySelectorAll('.note-tab').forEach((t,i)=>t.classList.toggle('on',i===n));
   document.querySelectorAll('.note-panel').forEach((p,i)=>p.classList.toggle('on',i===n));
   activeNoteTab=n;
 }
-
+ 
 function stripH(s){ return (s||'').replace(/<[^>]+>/g,'').replace(/&[a-z]+;/g,' ').trim(); }
-
+ 
 function renderNotePanel(idx, d){
   const panel=$(`npanel-${idx}`);
   const hasRrss=$('ch-rrss').querySelector('input').checked;
   const hasSeo=$('ch-seo').querySelector('input').checked;
   const hasRev=$('ch-rev').querySelector('input').checked;
   const ri=d.titulo_recomendado_index??0;
-
+ 
   // Fotos
   let photosHtml='';
   const allPhotos=[];
@@ -542,7 +542,7 @@ function renderNotePanel(idx, d){
         </div>`).join('')}
     </div>`;
   }
-
+ 
   // Interlinking
   const ilHtml=(d.interlinking||[]).length?`
     <div class="sec">
@@ -551,7 +551,7 @@ function renderNotePanel(idx, d){
         ${(d.interlinking||[]).map(l=>`<div class="il-item"><div class="il-frase">"${esc(l.frase)}"</div><div class="il-dest">→ ${esc(l.destino)}</div><span class="il-jer">${esc(l.jerarquia||'')}</span></div>`).join('')}
       </div>
     </div>`:'';
-
+ 
   // Revisión
   const revItems=[
     {key:'sin_estructura_identica',label:'Sin estructura idéntica entre párrafos'},
@@ -567,7 +567,7 @@ function renderNotePanel(idx, d){
         ${revItems.map(it=>`<div class="rev-item"><span class="rev-icon">${d.revision[it.key]?'✅':'❌'}</span><div class="rev-body"><div class="rev-lbl">${it.label}</div>${!d.revision[it.key]&&d.revision.observaciones?`<div class="rev-obs">${esc(d.revision.observaciones)}</div>`:''}</div></div>`).join('')}
       </div>
     </div>`:'';
-
+ 
   panel.innerHTML=`
     ${photosHtml}
     <div class="sec"><div class="sec-hd"><div class="sec-row"><span class="bdg b1">F1</span><span class="sec-nm">Clasificación · Keywords · Etiquetas</span></div><button class="cp" onclick="doCopyEl('kw-${idx}',this)">⎘ Copiar</button></div>
@@ -600,12 +600,12 @@ function renderNotePanel(idx, d){
     <div class="er"><div class="ec"><div class="ek">Portada</div><div class="ev">${esc(d.portada||'—')}</div></div><div class="ec"><div class="ek">Horario</div><div class="ev">${esc(d.horario||'—')}</div></div></div></div>
   `;
 }
-
+ 
 function selectPhoto(noteIdx, photoIdx){
   const panel=$(`npanel-${noteIdx}`);
   panel.querySelectorAll('.photo-card').forEach((c,i)=>c.classList.toggle('selected',i===photoIdx));
 }
-
+ 
 function closeNoteTab(e, idx){
   e.stopPropagation();
   const tabs=document.querySelectorAll('.note-tab');
@@ -629,26 +629,44 @@ function hideErr(){ $('err').classList.remove('on'); }
 </script>
 </body>
 </html>"""
-
+ 
 # ── MODELOS ──
 class Article(BaseModel):
     url: str = ""
     title: str = ""
     text: str = ""
-
+ 
 class GenerateRequest(BaseModel):
     articles: list[Article]
     seccion: str = ""
     tono: str = "informativo"
     extras: dict = {}
-
+ 
 # ── SCRAPER ──
 SITE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9",
 }
-
+ 
+# URLs a ignorar en el scraping
+IGNORE_PATTERNS = [
+    "wordpress.org","elementor.com","wp-login","wp-admin","wp-content",
+    "#","javascript:","mailto:","tel:","feed/","page/","category/",
+    "tag/","author/","wp-json","xmlrpc","comentarios","?s=","?p=",
+    "/servicios","/inicio","/noticias/#","/participacion",
+]
+ 
+def is_valid_article_url(url: str, base: str) -> bool:
+    if not url.startswith("http"): return False
+    if not url.startswith(base): return False
+    if any(p in url.lower() for p in IGNORE_PATTERNS): return False
+    slug = url.replace(base,"").strip("/")
+    # slug debe tener al menos 10 chars y contener guiones (nota real)
+    if len(slug) < 10: return False
+    if slug.count("-") < 2: return False
+    return True
+ 
 async def scrape_source(key: str):
     src = SOURCES[key]
     articles = []
@@ -657,36 +675,75 @@ async def scrape_source(key: str):
             r = await client.get(src["url"], headers=SITE_HEADERS)
             soup = BeautifulSoup(r.text, "html.parser")
             seen = set()
-            pat = src["pattern"]
-            links = soup.find_all("a", href=lambda h: h and (pat in h if pat else len(h) > 10))
-            for a in links:
-                href = a.get("href","")
-                url = href if href.startswith("http") else src["base"]+href
-                if url in seen or len(url)<20: continue
-                seen.add(url)
-                heading = a.find(["h2","h3","h4","h5"])
-                title = (heading or a).get_text(strip=True).replace("\n"," ").strip()
-                if not title or len(title)<20 or len(title)>200: continue
-                parent = a.find_parent(["article","div","li"])
-                sec = "—"
-                if parent:
-                    h6 = parent.find("h6")
-                    if h6: sec = re.sub(r'\d+\s+de\s+\w+\s+de\s+\d{4}','',h6.get_text(strip=True)).strip()
-                articles.append({"url":url,"title":title,"sec":sec,"source":src["name"]})
-                if len(articles)>=20: break
+ 
+            if key == "bariloche":
+                # WordPress: buscar en article tags y h2/h3 con links
+                candidates = []
+                # Buscar articles
+                for article in soup.find_all(["article","div"], class_=lambda c: c and any(x in " ".join(c) for x in ["post","entry","article","noticia","item"])):
+                    a = article.find("a", href=True)
+                    if not a: continue
+                    href = a.get("href","")
+                    if not is_valid_article_url(href, src["base"]): continue
+                    heading = article.find(["h1","h2","h3","h4"])
+                    title = heading.get_text(strip=True) if heading else a.get_text(strip=True)
+                    title = title.replace("\n"," ").strip()
+                    if not title or len(title)<20: continue
+                    # Fecha
+                    date_el = article.find(["time","span"], class_=lambda c: c and any(x in " ".join(c or []) for x in ["date","fecha","time","published"]))
+                    date_txt = date_el.get_text(strip=True) if date_el else ""
+                    # Categoría
+                    cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","tag","categoria"]))
+                    sec = cat_el.get_text(strip=True) if cat_el else "Bariloche"
+                    if href not in seen:
+                        seen.add(href)
+                        candidates.append({"url":href,"title":title,"sec":sec,"source":src["name"],"date":date_txt})
+                # Si no encontró con articles, buscar todos los links válidos con heading dentro
+                if not candidates:
+                    for a in soup.find_all("a", href=True):
+                        href = a.get("href","")
+                        if not is_valid_article_url(href, src["base"]): continue
+                        if href in seen: continue
+                        seen.add(href)
+                        heading = a.find(["h1","h2","h3","h4"])
+                        title = (heading or a).get_text(strip=True).replace("\n"," ").strip()
+                        if not title or len(title)<20 or len(title)>200: continue
+                        candidates.append({"url":href,"title":title,"sec":"Bariloche","source":src["name"],"date":""})
+                articles = candidates[:20]
+ 
+            else:
+                # Prensa RN y Policía — scraper original
+                pat = src["pattern"]
+                links = soup.find_all("a", href=lambda h: h and (pat in h if pat else len(h) > 10))
+                for a in links:
+                    href = a.get("href","")
+                    url = href if href.startswith("http") else src["base"]+href
+                    if url in seen or len(url)<20: continue
+                    seen.add(url)
+                    heading = a.find(["h2","h3","h4","h5"])
+                    title = (heading or a).get_text(strip=True).replace("\n"," ").strip()
+                    if not title or len(title)<20 or len(title)>200: continue
+                    parent = a.find_parent(["article","div","li"])
+                    sec = "—"
+                    if parent:
+                        h6 = parent.find("h6")
+                        if h6: sec = re.sub(r'\d+\s+de\s+\w+\s+de\s+\d{4}','',h6.get_text(strip=True)).strip()
+                    articles.append({"url":url,"title":title,"sec":sec,"source":src["name"]})
+                    if len(articles)>=20: break
+ 
     except Exception as e:
         print(f"scrape {key}: {e}")
     return articles
-
+ 
 # ── ENDPOINTS ──
 @app.get("/", response_class=HTMLResponse)
 def root(): return HTML
-
+ 
 @app.get("/noticias/{source}")
 async def get_noticias(source: str):
     if source not in SOURCES: return {"articles":[],"error":"Fuente no encontrada"}
     return {"articles": await scrape_source(source), "total": len(await scrape_source(source))}
-
+ 
 @app.get("/articulo")
 async def get_articulo(url: str):
     try:
@@ -708,7 +765,7 @@ async def get_articulo(url: str):
             return {"title":title,"text":" ".join(text.split())[:3000],"photo":photo}
     except Exception as e:
         return {"title":"","text":f"(error: {e})","photo":None}
-
+ 
 @app.get("/fotos")
 async def get_fotos(q: str = Query("")):
     photos = []
@@ -743,7 +800,7 @@ async def get_fotos(q: str = Query("")):
         except Exception:
             pass
     return {"photos": photos}
-
+ 
 @app.post("/generar")
 async def generar(req: GenerateRequest):
     if not OPENAI_API_KEY:
@@ -757,7 +814,7 @@ async def generar(req: GenerateRequest):
     if not req.extras.get("rrss"): user_msg += "\n\nDejar rrss vacío."
     if not req.extras.get("micro_seo"): user_msg += "\n\nDejar micro_seo vacío."
     user_msg += "\n\nIMPORTANTE: El desarrollo DEBE tener MÍNIMO 3 subtítulos con formato <h3>Subtítulo</h3> distribuidos cada 4-5 párrafos. El interlinking DEBE tener MÍNIMO 3 ítems (máximo 4) con frase, destino y jerarquía. Sin estos elementos el output es inválido."
-
+ 
     async with httpx.AsyncClient(timeout=90) as client:
         resp = await client.post(
             "https://api.openai.com/v1/chat/completions",
@@ -781,7 +838,11 @@ async def generar(req: GenerateRequest):
         return json.loads(raw)
     except Exception:
         raise HTTPException(500, "No se pudo parsear la respuesta de GPT")
-
+ 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+ 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
