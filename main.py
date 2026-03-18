@@ -46,7 +46,7 @@ async def fetch_article_text(url: str) -> str:
         return f"(error: {e})"
 
 # =========================
-# SCRAPER NOTICIAS (FIX REAL)
+# SCRAPER NOTICIAS (NEXT DATA)
 # =========================
 async def fetch_listing(source: str) -> list[dict]:
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -54,38 +54,56 @@ async def fetch_listing(source: str) -> list[dict]:
 
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         try:
-            r = await client.get("https://prensa.rionegro.gov.ar/archivo", headers=headers)
+            r = await client.get("https://prensa.rionegro.gov.ar/", headers=headers)
             soup = BeautifulSoup(r.text, "html.parser")
+
+            script = soup.find("script", id="__NEXT_DATA__")
+
+            if not script:
+                print("NO NEXT DATA")
+                return []
+
+            data = json.loads(script.string)
+
+            def find_articles(obj):
+                results = []
+
+                if isinstance(obj, dict):
+                    if "titulo" in obj and "slug" in obj:
+                        results.append(obj)
+
+                    for v in obj.values():
+                        results.extend(find_articles(v))
+
+                elif isinstance(obj, list):
+                    for item in obj:
+                        results.extend(find_articles(item))
+
+                return results
+
+            raw_articles = find_articles(data)
 
             seen = set()
 
-            for a in soup.find_all("a", href=True):
-                href = a["href"]
+            for item in raw_articles:
+                slug = item.get("slug")
+                title = item.get("titulo")
 
-                if "/articulo/" not in href:
+                if not slug or not title:
                     continue
 
-                url = href if href.startswith("http") else f"https://prensa.rionegro.gov.ar{href}"
+                url = f"https://prensa.rionegro.gov.ar/articulo/{slug}"
 
                 if url in seen:
                     continue
                 seen.add(url)
 
-                title = ""
-
-                heading = a.find(["h1","h2","h3","h4"])
-                if heading:
-                    title = heading.get_text(strip=True)
-
-                if not title:
-                    title = a.get_text(strip=True)
-
-                if not title or len(title) < 15:
+                if len(title) < 10:
                     continue
 
                 articles.append({
                     "url": url,
-                    "title": title,
+                    "title": title.strip(),
                     "sec": "Río Negro",
                     "img": None,
                     "source": "Prensa Río Negro"
@@ -146,5 +164,5 @@ async def debug():
         r = await client.get("https://prensa.rionegro.gov.ar/")
         return {
             "status": r.status_code,
-            "ok": "__NEXT_DATA__" in r.text
+            "has_next_data": "__NEXT_DATA__" in r.text
         }
