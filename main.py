@@ -5,6 +5,7 @@ import httpx
 import os
 import urllib.parse
 import json
+import re
 from datetime import datetime
 from bs4 import BeautifulSoup
 
@@ -41,13 +42,19 @@ async def fetch_article_text(url: str) -> str:
 
 async def fetch_listing(source: str) -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
-    search_url = f"https://prensa.rionegro.gov.ar/busqueda/articulo?q=&t=&d={today}"
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; DiarioENE/1.0)"}
+    url = f"https://prensa.rionegro.gov.ar/busqueda/articulo?q=&t=&d={today}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-AR,es;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "no-cache",
+    }
     articles = []
 
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
         try:
-            r = await client.get(search_url, headers=headers)
+            r = await client.get(url, headers=headers)
             soup = BeautifulSoup(r.text, "html.parser")
             seen = set()
 
@@ -58,34 +65,29 @@ async def fetch_listing(source: str) -> list[dict]:
                     continue
                 seen.add(full_url)
 
-                # title: h4 inside the link
                 heading = a.find(["h2","h3","h4","h5"])
                 title = (heading or a).get_text(strip=True).replace("\n", " ").strip()
                 if not title or len(title) < 15:
                     continue
 
-                # section & date: the h6 sibling inside same parent
                 parent = a.find_parent(["article","div","li","section"])
                 sec = "Río Negro"
                 if parent:
                     h6 = parent.find("h6")
                     if h6:
-                        sec = h6.get_text(strip=True)
-                        # strip date part (e.g. "Energía17 de mar de 2026" → "Energía")
-                        import re
-                        sec = re.sub(r'\d+\s+de\s+\w+\s+de\s+\d{4}', '', sec).strip()
+                        sec = re.sub(r'\d+\s+de\s+\w+\s+de\s+\d{4}', '', h6.get_text(strip=True)).strip()
 
-                # image: decode _next/image url param
                 img = None
-                img_el = parent.find("img") if parent else None
-                if img_el:
-                    raw = img_el.get("src") or img_el.get("data-src") or ""
-                    if "_next/image" in raw:
-                        parsed = urllib.parse.urlparse(raw)
-                        params = urllib.parse.parse_qs(parsed.query)
-                        img = urllib.parse.unquote(params.get("url", [""])[0])
-                    elif raw.startswith("http"):
-                        img = raw
+                if parent:
+                    img_el = parent.find("img")
+                    if img_el:
+                        raw = img_el.get("src") or img_el.get("data-src") or ""
+                        if "_next/image" in raw:
+                            parsed = urllib.parse.urlparse(raw)
+                            params = urllib.parse.parse_qs(parsed.query)
+                            img = urllib.parse.unquote(params.get("url", [""])[0])
+                        elif raw.startswith("http") and "data:image" not in raw:
+                            img = raw
 
                 articles.append({
                     "url": full_url,
@@ -105,6 +107,28 @@ async def fetch_listing(source: str) -> list[dict]:
 @app.get("/")
 def root():
     return {"status": "ENE Redactor API ok"}
+
+@app.get("/debug")
+async def debug():
+    today = datetime.now().strftime("%Y-%m-%d")
+    url = f"https://prensa.rionegro.gov.ar/busqueda/articulo?q=&t=&d={today}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-AR,es;q=0.9",
+    }
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        r = await client.get(url, headers=headers)
+        html = r.text
+        return {
+            "status": r.status_code,
+            "url_fetched": str(r.url),
+            "today": today,
+            "has_articulo_links": "/articulo/" in html,
+            "articulo_count": html.count("/articulo/"),
+            "html_length": len(html),
+            "html_sample": html[1500:3500]
+        }
 
 @app.get("/noticias")
 async def get_noticias(fuente: str = "prensa"):
@@ -133,8 +157,17 @@ async def generar(req: FetchRequest):
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model":"claude-sonnet-4-20250514","max_tokens":4000,"system":SYSTEM_PROMPT,"messages":[{"role":"user","content":user_msg}]},
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 4000,
+                "system": SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": user_msg}]
+            },
         )
     if resp.status_code != 200:
         raise HTTPException(500, f"Error API: {resp.text}")
