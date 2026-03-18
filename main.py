@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 import os
-import urllib.parse
 import json
 from bs4 import BeautifulSoup
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,11 +17,7 @@ app.add_middleware(
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-SYSTEM_PROMPT = """Sos el editor jefe digital de Diario ENE, medio regional con base en Bariloche y foco en Río Negro y la Patagonia.
-ESTILO ENE: título directo, urgencia funcional, lenguaje claro, cero adjetivos grandilocuentes, pensado para el lector patagónico.
-Evitar: "en el marco de", "con el objetivo de", "se llevó a cabo", párrafos de longitud idéntica.
-Negrita: nombres propios, datos numéricos, keywords SEO. Cursiva: marcas, términos técnicos. Máx 15% del texto.
-RESPONDÉ SOLO con JSON válido (sin markdown)."""
+SYSTEM_PROMPT = """Sos el editor jefe digital de Diario ENE."""
 
 class FetchRequest(BaseModel):
     urls: list[str]
@@ -30,9 +26,8 @@ class FetchRequest(BaseModel):
     extras: dict = {}
 
 # =========================
-# SCRAPER DE ARTÍCULOS
+# EXTRAER TEXTO ARTÍCULO
 # =========================
-
 async def fetch_article_text(url: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
@@ -50,63 +45,43 @@ async def fetch_article_text(url: str) -> str:
     except Exception as e:
         return f"(error: {e})"
 
-
+# =========================
+# SCRAPER NOTICIAS (FIX REAL)
+# =========================
 async def fetch_listing(source: str) -> list[dict]:
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; DiarioENE/1.0)"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     articles = []
 
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-
-        # Strategy 1: NEXT DATA
-        try:
-            r = await client.get("https://prensa.rionegro.gov.ar/", headers=headers)
-            soup = BeautifulSoup(r.text, "html.parser")
-            script = soup.find("script", id="__NEXT_DATA__")
-
-            if script and script.string:
-                data = json.loads(script.string)
-
-                def extract(obj):
-                    if isinstance(obj, dict):
-                        for k, v in obj.items():
-                            if k in ["articles", "news"] and isinstance(v, list):
-                                for item in v:
-                                    if item.get("title"):
-                                        articles.append({
-                                            "url": f"https://prensa.rionegro.gov.ar/articulo/{item.get('id','')}/{item.get('slug','')}",
-                                            "title": item.get("title"),
-                                            "sec": "Río Negro",
-                                            "img": None,
-                                            "source": "Prensa Río Negro"
-                                        })
-                            else:
-                                extract(v)
-                    elif isinstance(obj, list):
-                        for i in obj:
-                            extract(i)
-
-                extract(data)
-
-                if articles:
-                    return articles[:16]
-
-        except Exception as e:
-            print("NEXT error", e)
-
-        # Strategy 2: ARCHIVO
         try:
             r = await client.get("https://prensa.rionegro.gov.ar/archivo", headers=headers)
             soup = BeautifulSoup(r.text, "html.parser")
 
-            for a in soup.find_all("a", href=lambda h: h and "/articulo/" in h):
-                title = a.get_text(strip=True)
+            seen = set()
 
-                if len(title) < 20:
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+
+                if "/articulo/" not in href:
                     continue
 
-                url = a["href"]
-                if not url.startswith("http"):
-                    url = f"https://prensa.rionegro.gov.ar{url}"
+                url = href if href.startswith("http") else f"https://prensa.rionegro.gov.ar{href}"
+
+                if url in seen:
+                    continue
+                seen.add(url)
+
+                title = ""
+
+                heading = a.find(["h1","h2","h3","h4"])
+                if heading:
+                    title = heading.get_text(strip=True)
+
+                if not title:
+                    title = a.get_text(strip=True)
+
+                if not title or len(title) < 15:
+                    continue
 
                 articles.append({
                     "url": url,
@@ -116,32 +91,25 @@ async def fetch_listing(source: str) -> list[dict]:
                     "source": "Prensa Río Negro"
                 })
 
-                if len(articles) >= 16:
+                if len(articles) >= 20:
                     break
 
-            if articles:
-                return articles
-
         except Exception as e:
-            print("ARCHIVO error", e)
+            print("SCRAPER error:", e)
 
     return articles
-
 
 # =========================
 # ENDPOINTS
 # =========================
-
 @app.get("/")
 def root():
     return {"status": "ENE Redactor API ok"}
-
 
 @app.get("/noticias")
 async def get_noticias():
     articles = await fetch_listing("prensa")
     return {"articles": articles, "total": len(articles)}
-
 
 @app.post("/generar")
 async def generar(req: FetchRequest):
@@ -171,7 +139,6 @@ async def generar(req: FetchRequest):
         )
 
     return resp.json()
-
 
 @app.get("/debug")
 async def debug():
