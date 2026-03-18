@@ -209,3 +209,19 @@ async def generar(req: FetchRequest):
         return json.loads(raw)
     except Exception:
         raise HTTPException(500, "No se pudo parsear la respuesta")
+@app.get("/debug")
+async def debug():
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        r = await client.get(
+            "https://prensa.rionegro.gov.ar/",
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        html = r.text[:3000]
+        has_next_data = "__NEXT_DATA__" in r.text
+        has_articulo = "/articulo/" in r.text
+        return {
+            "status": r.status_code,
+            "has_next_data": has_next_data,
+            "has_articulo_links": has_articulo,
+            "html_preview": html
+        }
