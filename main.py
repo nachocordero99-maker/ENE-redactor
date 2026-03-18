@@ -5,6 +5,7 @@ import httpx
 import os
 import urllib.parse
 import json
+from datetime import datetime
 from bs4 import BeautifulSoup
 
 app = FastAPI()
@@ -39,106 +40,71 @@ async def fetch_article_text(url: str) -> str:
         return f"(error: {e})"
 
 async def fetch_listing(source: str) -> list[dict]:
+    today = datetime.now().strftime("%Y-%m-%d")
+    search_url = f"https://prensa.rionegro.gov.ar/busqueda/articulo?q=&t=&d={today}"
     headers = {"User-Agent": "Mozilla/5.0 (compatible; DiarioENE/1.0)"}
     articles = []
 
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         try:
-            r = await client.get("https://prensa.rionegro.gov.ar/", headers=headers)
+            r = await client.get(search_url, headers=headers)
             soup = BeautifulSoup(r.text, "html.parser")
-            script = soup.find("script", id="__NEXT_DATA__")
-            if script and script.string:
-                data = json.loads(script.string)
-                # Navigate to props.pageProps then look for any list with articles
-                page_props = data.get("props", {}).get("pageProps", {})
+            seen = set()
 
-                def extract_articles(obj, depth=0):
-                    if depth > 8:
-                        return []
-                    if isinstance(obj, list) and len(obj) >= 2:
-                        first = obj[0] if obj else {}
-                        if isinstance(first, dict) and any(k in first for k in ["title","titulo","id","slug"]):
-                            return obj
-                    if isinstance(obj, dict):
-                        # prioritize keys that sound like article lists
-                        priority = ["articles","noticias","news","items","data","posts","notas"]
-                        for key in priority:
-                            if key in obj:
-                                result = extract_articles(obj[key], depth+1)
-                                if result:
-                                    return result
-                        for v in obj.values():
-                            result = extract_articles(v, depth+1)
-                            if result:
-                                return result
-                    return []
+            for a in soup.find_all("a", href=lambda h: h and "/articulo/" in str(h)):
+                href = a.get("href", "")
+                full_url = href if href.startswith("http") else f"https://prensa.rionegro.gov.ar{href}"
+                if full_url in seen:
+                    continue
+                seen.add(full_url)
 
-                items = extract_articles(page_props) or extract_articles(data)
+                # title: h4 inside the link
+                heading = a.find(["h2","h3","h4","h5"])
+                title = (heading or a).get_text(strip=True).replace("\n", " ").strip()
+                if not title or len(title) < 15:
+                    continue
 
-                for item in items[:20]:
-                    if not isinstance(item, dict):
-                        continue
-                    title = item.get("title") or item.get("titulo") or item.get("name") or ""
-                    if not title or len(str(title)) < 15:
-                        continue
-                    art_id = item.get("id") or item.get("articleId") or item.get("article_id") or ""
-                    slug = item.get("slug") or item.get("url_slug") or str(art_id)
-                    full_url = f"https://prensa.rionegro.gov.ar/articulo/{art_id}/{slug}" if art_id else ""
-                    sec = item.get("category") or item.get("section") or item.get("categoria") or item.get("sectionName") or "Río Negro"
-                    if isinstance(sec, dict):
-                        sec = sec.get("name") or sec.get("nombre") or "Río Negro"
-                    img = item.get("image") or item.get("imagen") or item.get("thumbnail") or item.get("photo") or item.get("cover") or ""
-                    if isinstance(img, dict):
-                        img = img.get("url") or img.get("src") or img.get("path") or ""
-                    if img and "_next/image" in str(img):
-                        parsed = urllib.parse.urlparse(str(img))
+                # section & date: the h6 sibling inside same parent
+                parent = a.find_parent(["article","div","li","section"])
+                sec = "Río Negro"
+                if parent:
+                    h6 = parent.find("h6")
+                    if h6:
+                        sec = h6.get_text(strip=True)
+                        # strip date part (e.g. "Energía17 de mar de 2026" → "Energía")
+                        import re
+                        sec = re.sub(r'\d+\s+de\s+\w+\s+de\s+\d{4}', '', sec).strip()
+
+                # image: decode _next/image url param
+                img = None
+                img_el = parent.find("img") if parent else None
+                if img_el:
+                    raw = img_el.get("src") or img_el.get("data-src") or ""
+                    if "_next/image" in raw:
+                        parsed = urllib.parse.urlparse(raw)
                         params = urllib.parse.parse_qs(parsed.query)
                         img = urllib.parse.unquote(params.get("url", [""])[0])
-                    # fix relative silvercoder image paths
-                    if img and img.startswith("/files/"):
-                        img = f"https://silvercoder.rionegro.gov.ar{img}"
-                    articles.append({
-                        "url": full_url,
-                        "title": str(title).strip(),
-                        "sec": str(sec).strip(),
-                        "img": str(img).strip() if img else None,
-                        "source": "Prensa Río Negro"
-                    })
-                if articles:
-                    return articles
+                    elif raw.startswith("http"):
+                        img = raw
+
+                articles.append({
+                    "url": full_url,
+                    "title": title,
+                    "sec": sec,
+                    "img": img,
+                    "source": "Prensa Río Negro"
+                })
+                if len(articles) >= 20:
+                    break
+
         except Exception as e:
-            print(f"next_data error: {e}")
+            print(f"fetch_listing error: {e}")
 
     return articles
 
 @app.get("/")
 def root():
     return {"status": "ENE Redactor API ok"}
-
-@app.get("/debug")
-async def debug():
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        r = await client.get("https://prensa.rionegro.gov.ar/",
-                             headers={"User-Agent": "Mozilla/5.0"})
-        soup = BeautifulSoup(r.text, "html.parser")
-        script = soup.find("script", id="__NEXT_DATA__")
-        next_data = None
-        if script and script.string:
-            try:
-                raw = json.loads(script.string)
-                # show just pageProps keys and first item of any list found
-                page_props = raw.get("props", {}).get("pageProps", {})
-                next_data = {
-                    "pageProps_keys": list(page_props.keys()),
-                    "sample": str(json.dumps(page_props))[:3000]
-                }
-            except Exception as e:
-                next_data = {"error": str(e)}
-        return {
-            "status": r.status_code,
-            "has_next_data": "__NEXT_DATA__" in r.text,
-            "next_data": next_data
-        }
 
 @app.get("/noticias")
 async def get_noticias(fuente: str = "prensa"):
