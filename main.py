@@ -45,7 +45,7 @@ async def scrape(source_key: str):
     src = SOURCES[source_key]
     articles = []
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, verify=False) as client:
             r = await client.get(src["url"], headers=HEADERS)
             soup = BeautifulSoup(r.text, "html.parser")
             seen = set()
