@@ -144,7 +144,10 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
 .note-tabs{display:flex;gap:2px;flex-wrap:wrap;margin-bottom:0;}
 .note-tab{padding:7px 16px;font-size:11px;font-weight:500;border:1px solid var(--border);background:var(--paper2);color:var(--ink3);border-radius:var(--r) var(--r) 0 0;border-bottom:none;cursor:pointer;position:relative;}
 .note-tab.on{background:#fff;color:var(--blue2);border-bottom:1px solid #fff;margin-bottom:-1px;z-index:1;font-weight:600;}
-.note-tab .note-tab-status{font-size:9px;margin-left:6px;}
+.note-tab .note-tab-status{font-size:9px;margin-left:4px;}
+.note-tab-txt{cursor:pointer;}
+.note-tab-close{margin-left:8px;color:var(--ink3);cursor:pointer;font-size:10px;padding:1px 4px;border-radius:2px;}
+.note-tab-close:hover{background:var(--paper3);color:var(--ink);}
 .note-panel{display:none;border:1px solid var(--border);border-radius:0 var(--r) var(--r) var(--r);padding:0;animation:fi .3s ease;}
 .note-panel.on{display:block;}
 @keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
@@ -450,8 +453,7 @@ async function generateAll(){
     const tab=document.createElement('div');
     tab.className='note-tab'+(i===0?' on':'');
     tab.id=`ntab-${i}`;
-    tab.innerHTML=`${esc(item.title.slice(0,25))}… <span class="note-tab-status">⏳</span>`;
-    tab.onclick=()=>switchNoteTab(i);
+    tab.innerHTML=`<span class="note-tab-txt" onclick="switchNoteTab(${i})">${esc(item.title.slice(0,22))}… <span class="note-tab-status">⏳</span></span><span class="note-tab-close" onclick="closeNoteTab(event,${i})">✕</span>`;
     tabsEl.appendChild(tab);
     // Panel placeholder
     const panel=document.createElement('div');
@@ -604,6 +606,18 @@ function selectPhoto(noteIdx, photoIdx){
   panel.querySelectorAll('.photo-card').forEach((c,i)=>c.classList.toggle('selected',i===photoIdx));
 }
 
+function closeNoteTab(e, idx){
+  e.stopPropagation();
+  const tabs=document.querySelectorAll('.note-tab');
+  const panels=document.querySelectorAll('.note-panel');
+  tabs[idx].remove();
+  panels[idx].remove();
+  // Activate first remaining tab
+  const remaining=document.querySelectorAll('.note-tab');
+  const remainingPanels=document.querySelectorAll('.note-panel');
+  if(remaining.length>0){ remaining[0].classList.add('on'); remainingPanels[0].classList.add('on'); }
+  else{ $('notes-area').style.display='none'; $('empty').style.display='block'; }
+}
 async function doCopyEl(id,btn){
   try{ await navigator.clipboard.writeText($(id)?.innerText||''); }catch(e){}
   btn.textContent='✓'; btn.classList.add('ok');
@@ -704,7 +718,7 @@ async def get_fotos(q: str = Query("")):
                 r = await client.get(
                     "https://api.pexels.com/v1/search",
                     headers={"Authorization": PEXELS_API_KEY},
-                    params={"query": q+" Patagonia Argentina", "per_page": 3, "orientation": "landscape"}
+                    params={"query": q+" Patagonia Argentina", "per_page": 5, "orientation": "landscape"}
                 )
                 if r.status_code == 200:
                     data = r.json()
@@ -712,13 +726,20 @@ async def get_fotos(q: str = Query("")):
         except Exception as e:
             print(f"pexels error: {e}")
     else:
-        # Unsplash sin key (uso limitado)
+        # Unsplash sin key (uso limitado) - 3 variantes
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                terms = q.replace(" ","+")
-                r = await client.get(f"https://source.unsplash.com/featured/800x500/?{terms},argentina", follow_redirects=True)
-                if r.status_code == 200 and "image" in r.headers.get("content-type",""):
-                    photos = [{"url":str(r.url),"photographer":"Unsplash"}]
+                variants = [q+" patagonia", q+" argentina", q+" bariloche"]
+                for v in variants:
+                    terms = v.replace(" ","+")
+                    try:
+                        r = await client.get(f"https://source.unsplash.com/featured/800x500/?{terms}", follow_redirects=True)
+                        if r.status_code == 200 and "image" in r.headers.get("content-type",""):
+                            url = str(r.url)
+                            if not any(p["url"]==url for p in photos):
+                                photos.append({"url":url,"photographer":"Unsplash"})
+                    except Exception:
+                        pass
         except Exception:
             pass
     return {"photos": photos}
@@ -735,14 +756,14 @@ async def generar(req: GenerateRequest):
     if req.tono != "informativo": user_msg += f"\n\nTONO: {req.tono}"
     if not req.extras.get("rrss"): user_msg += "\n\nDejar rrss vacío."
     if not req.extras.get("micro_seo"): user_msg += "\n\nDejar micro_seo vacío."
-    user_msg += "\n\nIMPORTANTE: El desarrollo DEBE incluir subtítulos <h3> cada 4-5 párrafos. El interlinking DEBE tener entre 2 y 4 ítems con frase, destino y jerarquía. La revisión DEBE evaluar los 5 checks con true/false."
+    user_msg += "\n\nIMPORTANTE: El desarrollo DEBE tener MÍNIMO 3 subtítulos con formato <h3>Subtítulo</h3> distribuidos cada 4-5 párrafos. El interlinking DEBE tener MÍNIMO 3 ítems (máximo 4) con frase, destino y jerarquía. Sin estos elementos el output es inválido."
 
     async with httpx.AsyncClient(timeout=90) as client:
         resp = await client.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "gpt-4o-mini",
+                "model": "gpt-4o",
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "response_format": {"type": "json_object"},
