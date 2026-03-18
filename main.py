@@ -43,48 +43,63 @@ async def fetch_listing(source: str) -> list[dict]:
     articles = []
 
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-
-        # Strategy 1: parse __NEXT_DATA__ from homepage
         try:
             r = await client.get("https://prensa.rionegro.gov.ar/", headers=headers)
             soup = BeautifulSoup(r.text, "html.parser")
             script = soup.find("script", id="__NEXT_DATA__")
             if script and script.string:
                 data = json.loads(script.string)
+                # Navigate to props.pageProps then look for any list with articles
+                page_props = data.get("props", {}).get("pageProps", {})
 
-                def find_article_lists(obj, depth=0):
-                    if depth > 12:
+                def extract_articles(obj, depth=0):
+                    if depth > 8:
                         return []
-                    if isinstance(obj, list) and len(obj) >= 3:
-                        if all(isinstance(x, dict) and ("title" in x or "titulo" in x) for x in obj[:2]):
+                    if isinstance(obj, list) and len(obj) >= 2:
+                        first = obj[0] if obj else {}
+                        if isinstance(first, dict) and any(k in first for k in ["title","titulo","id","slug"]):
                             return obj
                     if isinstance(obj, dict):
+                        # prioritize keys that sound like article lists
+                        priority = ["articles","noticias","news","items","data","posts","notas"]
+                        for key in priority:
+                            if key in obj:
+                                result = extract_articles(obj[key], depth+1)
+                                if result:
+                                    return result
                         for v in obj.values():
-                            r2 = find_article_lists(v, depth+1)
-                            if r2:
-                                return r2
+                            result = extract_articles(v, depth+1)
+                            if result:
+                                return result
                     return []
 
-                items = find_article_lists(data)
-                for item in items[:16]:
-                    title = item.get("title") or item.get("titulo") or ""
-                    if not title or len(str(title)) < 20:
+                items = extract_articles(page_props) or extract_articles(data)
+
+                for item in items[:20]:
+                    if not isinstance(item, dict):
                         continue
-                    art_id = item.get("id") or item.get("articleId") or ""
+                    title = item.get("title") or item.get("titulo") or item.get("name") or ""
+                    if not title or len(str(title)) < 15:
+                        continue
+                    art_id = item.get("id") or item.get("articleId") or item.get("article_id") or ""
                     slug = item.get("slug") or item.get("url_slug") or str(art_id)
                     full_url = f"https://prensa.rionegro.gov.ar/articulo/{art_id}/{slug}" if art_id else ""
-                    sec = item.get("category") or item.get("section") or item.get("categoria") or "Río Negro"
+                    sec = item.get("category") or item.get("section") or item.get("categoria") or item.get("sectionName") or "Río Negro"
                     if isinstance(sec, dict):
                         sec = sec.get("name") or sec.get("nombre") or "Río Negro"
-                    img = item.get("image") or item.get("imagen") or item.get("thumbnail") or item.get("photo") or ""
+                    img = item.get("image") or item.get("imagen") or item.get("thumbnail") or item.get("photo") or item.get("cover") or ""
                     if isinstance(img, dict):
-                        img = img.get("url") or img.get("src") or ""
+                        img = img.get("url") or img.get("src") or img.get("path") or ""
                     if img and "_next/image" in str(img):
                         parsed = urllib.parse.urlparse(str(img))
                         params = urllib.parse.parse_qs(parsed.query)
                         img = urllib.parse.unquote(params.get("url", [""])[0])
+                    # fix relative silvercoder image paths
+                    if img and img.startswith("/files/"):
+                        img = f"https://silvercoder.rionegro.gov.ar{img}"
                     articles.append({
-                        "url": full_url, "title": str(title).strip(),
+                        "url": full_url,
+                        "title": str(title).strip(),
                         "sec": str(sec).strip(),
                         "img": str(img).strip() if img else None,
                         "source": "Prensa Río Negro"
@@ -94,82 +109,36 @@ async def fetch_listing(source: str) -> list[dict]:
         except Exception as e:
             print(f"next_data error: {e}")
 
-        # Strategy 2: scrape /archivo (sometimes server-side rendered)
-        try:
-            r = await client.get("https://prensa.rionegro.gov.ar/archivo", headers=headers)
-            soup = BeautifulSoup(r.text, "html.parser")
-            seen = set()
-            for a in soup.find_all("a", href=lambda h: h and "/articulo/" in str(h)):
-                href = a.get("href", "")
-                full_url = href if href.startswith("http") else f"https://prensa.rionegro.gov.ar{href}"
-                if full_url in seen:
-                    continue
-                seen.add(full_url)
-                heading = a.find(["h2","h3","h4","strong"])
-                title = (heading or a).get_text(strip=True).replace("\n"," ").strip()
-                if not title or len(title) < 20:
-                    continue
-                parent = a.find_parent(["article","li","div"])
-                sec_el = None
-                if parent:
-                    for t in parent.find_all(["span","p","div"]):
-                        classes = " ".join(t.get("class") or [])
-                        if any(x in classes for x in ["categ","section","tag","category"]):
-                            sec_el = t
-                            break
-                sec = sec_el.get_text(strip=True) if sec_el else "Río Negro"
-                img_el = parent.find("img") if parent else None
-                img = None
-                if img_el:
-                    raw = img_el.get("src") or img_el.get("data-src") or ""
-                    if "_next/image" in raw:
-                        parsed = urllib.parse.urlparse(raw)
-                        params = urllib.parse.parse_qs(parsed.query)
-                        img = urllib.parse.unquote(params.get("url",[""])[0])
-                    elif raw.startswith("http"):
-                        img = raw
-                articles.append({"url":full_url,"title":title,"sec":sec,"img":img,"source":"Prensa Río Negro"})
-                if len(articles) >= 16:
-                    break
-            if articles:
-                return articles
-        except Exception as e:
-            print(f"archivo error: {e}")
-
-        # Strategy 3: silvercoder API
-        try:
-            for api_url in [
-                "https://silvercoder.rionegro.gov.ar/api/articles?limit=20&siteId=2",
-                "https://silvercoder.rionegro.gov.ar/api/news?limit=20&siteId=2",
-            ]:
-                try:
-                    r = await client.get(api_url, headers={**headers,"Accept":"application/json"})
-                    if r.status_code == 200 and "json" in r.headers.get("content-type",""):
-                        data = r.json()
-                        items = data if isinstance(data,list) else data.get("data",data.get("articles",[]))
-                        for item in items[:16]:
-                            title = item.get("title") or item.get("titulo") or ""
-                            if not title or len(title) < 15:
-                                continue
-                            art_id = item.get("id") or ""
-                            slug = item.get("slug") or str(art_id)
-                            articles.append({
-                                "url": f"https://prensa.rionegro.gov.ar/articulo/{art_id}/{slug}",
-                                "title": str(title).strip(), "sec": "Río Negro",
-                                "img": None, "source": "Prensa Río Negro"
-                            })
-                        if articles:
-                            return articles
-                except Exception:
-                    continue
-        except Exception as e:
-            print(f"silvercoder error: {e}")
-
     return articles
 
 @app.get("/")
 def root():
     return {"status": "ENE Redactor API ok"}
+
+@app.get("/debug")
+async def debug():
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        r = await client.get("https://prensa.rionegro.gov.ar/",
+                             headers={"User-Agent": "Mozilla/5.0"})
+        soup = BeautifulSoup(r.text, "html.parser")
+        script = soup.find("script", id="__NEXT_DATA__")
+        next_data = None
+        if script and script.string:
+            try:
+                raw = json.loads(script.string)
+                # show just pageProps keys and first item of any list found
+                page_props = raw.get("props", {}).get("pageProps", {})
+                next_data = {
+                    "pageProps_keys": list(page_props.keys()),
+                    "sample": str(json.dumps(page_props))[:3000]
+                }
+            except Exception as e:
+                next_data = {"error": str(e)}
+        return {
+            "status": r.status_code,
+            "has_next_data": "__NEXT_DATA__" in r.text,
+            "next_data": next_data
+        }
 
 @app.get("/noticias")
 async def get_noticias(fuente: str = "prensa"):
@@ -209,18 +178,3 @@ async def generar(req: FetchRequest):
         return json.loads(raw)
     except Exception:
         raise HTTPException(500, "No se pudo parsear la respuesta")
-
-@app.get("/debug")
-async def debug():
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        r = await client.get("https://prensa.rionegro.gov.ar/",
-                             headers={"User-Agent": "Mozilla/5.0"})
-        html = r.text[:3000]
-        has_next_data = "__NEXT_DATA__" in r.text
-        has_articulo = "/articulo/" in r.text
-        return {
-            "status": r.status_code,
-            "has_next_data": has_next_data,
-            "has_articulo_links": has_articulo,
-            "html_preview": html
-        }
