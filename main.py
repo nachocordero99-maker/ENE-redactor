@@ -49,8 +49,10 @@ HEADERS = {
 SOURCES = {
     "prensa":    {"name":"Prensa Río Negro",   "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar",  "pattern":"/articulo/",  "type":"silvercoder"},
     "bariloche": {"name":"Bariloche Informa",  "url":"https://barilocheinforma.gob.ar/",                    "base":"https://barilocheinforma.gob.ar", "pattern":"barilocheinforma.gob.ar/","type":"bariloche"},
-    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/novedades/",           "base":"https://policia.rionegro.gov.ar", "pattern":"/novedades/",             "type":"policia"},
-    "quorum":    {"name":"Quorum Legislativo", "url":"https://quorum.legisrn.gov.ar/",                      "base":"https://quorum.legisrn.gov.ar",   "pattern":"quorum.legisrn.gov.ar/","type":"wordpress"},
+    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/",                     "base":"https://policia.rionegro.gov.ar", "pattern":"policia.rionegro.gov.ar/", "type":"wordpress"},
+    "quorum":    {"name":"Quorum Legislativo",  "url":"https://quorum.legisrn.gov.ar/",                     "base":"https://quorum.legisrn.gov.ar",   "pattern":"quorum.legisrn.gov.ar/", "type":"wordpress"},
+    "mpfiscal":  {"name":"Ministerio Público RN", "url":"https://ministeriopublico.jusrionegro.gov.ar/",       "base":"https://ministeriopublico.jusrionegro.gov.ar","pattern":"/novedades/",         "type":"mpfiscal"},
+    "neuquen":   {"name":"Neuquén Informa",        "url":"https://www.neuqueninforma.gob.ar/",                  "base":"https://www.neuqueninforma.gob.ar",  "pattern":"/noticias/",             "type":"neuquen"},
 }
 
 HTML = r"""<!DOCTYPE html>
@@ -251,6 +253,8 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
       <label class="src-chip on" id="sc-bariloche"><input type="checkbox" value="bariloche" checked onchange="toggleSrc(this,'sc-bariloche')">🏔 Bariloche Informa</label>
       <label class="src-chip" id="sc-policia"><input type="checkbox" value="policia" onchange="toggleSrc(this,'sc-policia')">🚔 Policía RN</label>
       <label class="src-chip" id="sc-quorum"><input type="checkbox" value="quorum" onchange="toggleSrc(this,'sc-quorum')">🏛 Quorum</label>
+      <label class="src-chip" id="sc-mpfiscal"><input type="checkbox" value="mpfiscal" onchange="toggleSrc(this,'sc-mpfiscal')">⚖️ Ministerio Público</label>
+      <label class="src-chip" id="sc-neuquen"><input type="checkbox" value="neuquen" onchange="toggleSrc(this,'sc-neuquen')">🏔 Neuquén Informa</label>
       <button class="btn" id="btn-load" onclick="loadNews()">Cargar noticias →</button>
     </div>
     <div id="cards-grid" class="cards-grid"></div>
