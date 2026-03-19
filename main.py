@@ -48,8 +48,8 @@ HEADERS = {
 
 SOURCES = {
     "prensa":    {"name":"Prensa Río Negro",   "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar",  "pattern":"/articulo/",  "type":"silvercoder"},
-    "bariloche": {"name":"Bariloche Informa",  "url":"https://barilocheinforma.gob.ar/noticias/",           "base":"https://barilocheinforma.gob.ar", "pattern":"barilocheinforma.gob.ar/","type":"wordpress"},
-    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/category/noticias/",  "base":"https://policia.rionegro.gov.ar", "pattern":"/policia.rionegro.gov.ar/",  "type":"wordpress"},
+    "bariloche": {"name":"Bariloche Informa",  "url":"https://barilocheinforma.gob.ar/",                    "base":"https://barilocheinforma.gob.ar", "pattern":"barilocheinforma.gob.ar/","type":"bariloche"},
+    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/novedades/",           "base":"https://policia.rionegro.gov.ar", "pattern":"/novedades/",             "type":"policia"},
     "quorum":    {"name":"Quorum Legislativo", "url":"https://quorum.legisrn.gov.ar/",                      "base":"https://quorum.legisrn.gov.ar",   "pattern":"quorum.legisrn.gov.ar/","type":"wordpress"},
 }
 
@@ -744,9 +744,12 @@ IGNORE_PATTERNS = [
 
 def is_valid_article_url(url: str, base: str, min_dashes: int = 2) -> bool:
     if not url.startswith("http"): return False
-    if not url.startswith(base): return False
+    # Normalizar base para comparar (sin trailing slash, sin http/https diferencia)
+    base_norm = base.rstrip("/").replace("https://","").replace("http://","")
+    url_norm  = url.replace("https://","").replace("http://","")
+    if not url_norm.startswith(base_norm): return False
     if any(p in url.lower() for p in IGNORE_PATTERNS): return False
-    slug = url.replace(base,"").strip("/").split("?")[0]
+    slug = url_norm.replace(base_norm,"").strip("/").split("?")[0]
     if len(slug) < 10: return False
     if slug.count("-") < min_dashes: return False
     return True
@@ -755,38 +758,75 @@ def extract_wp_articles(soup, base: str, source_name: str, max_items: int = 20):
     """Scraper genérico para sitios WordPress."""
     articles = []
     seen = set()
-    # Buscar en article tags primero
-    for article in soup.find_all(["article"], limit=40):
+    base_domain = base.replace("https://","").replace("http://","").rstrip("/")
+
+    def get_photo(container):
+        if not container: return None
+        img = container.find("img")
+        if not img: return None
+        for attr in ["src","data-src","data-lazy-src","data-original","data-lazy"]:
+            raw = img.get(attr,"")
+            if raw and not raw.startswith("data:") and len(raw) > 10:
+                return raw if raw.startswith("http") else base + raw
+        return None
+
+    def get_preview(container):
+        if not container: return ""
+        p = container.find("p")
+        return " ".join(p.get_text(strip=True).split())[:160] if p else ""
+
+    # Estrategia 1: article tags
+    for article in soup.find_all("article", limit=40):
         a_tag = article.find("a", href=True)
         if not a_tag: continue
         href = a_tag.get("href","")
-        if not href.startswith("http"): href = base + href
+        if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
         if not is_valid_article_url(href, base): continue
         if href in seen: continue
         seen.add(href)
-        # Título
         heading = article.find(["h1","h2","h3","h4"])
         title = heading.get_text(strip=True) if heading else a_tag.get_text(strip=True)
         title = " ".join(title.split())
         if not title or len(title) < 20 or len(title) > 250: continue
-        # Foto
-        img = article.find("img")
-        photo = None
-        if img:
-            for attr in ["src","data-src","data-lazy-src","data-original"]:
-                raw = img.get(attr,"")
-                if raw and not raw.startswith("data:") and len(raw) > 10:
-                    photo = raw if raw.startswith("http") else base + raw
-                    break
-        # Categoría
-        cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","tag","section","etiqueta"]))
-        sec = cat_el.get_text(strip=True).strip() if cat_el else "General"
-        if len(sec) > 30: sec = "General"
-        # Preview
-        p_el = article.find("p")
-        preview = " ".join(p_el.get_text(strip=True).split())[:160] if p_el else ""
-        articles.append({"url":href,"title":title,"sec":sec,"source":source_name,"photo":photo,"preview":preview})
+        cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","tag","section"]))
+        sec = cat_el.get_text(strip=True)[:30] if cat_el else "General"
+        articles.append({"url":href,"title":title,"sec":sec,"source":source_name,
+                         "photo":get_photo(article),"preview":get_preview(article)})
         if len(articles) >= max_items: break
+
+    # Estrategia 2: h2/h3 con link directo (si strategy 1 no encontró nada)
+    if not articles:
+        for h in soup.find_all(["h2","h3"], limit=60):
+            a_tag = h.find("a", href=True)
+            if not a_tag: continue
+            href = a_tag.get("href","")
+            if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
+            if base_domain not in href: continue
+            if not is_valid_article_url(href, base, min_dashes=1): continue
+            if href in seen: continue
+            seen.add(href)
+            title = " ".join(h.get_text(strip=True).split())
+            if not title or len(title) < 15 or len(title) > 250: continue
+            parent = h.find_parent(["div","li","section","article"])
+            articles.append({"url":href,"title":title,"sec":"General","source":source_name,
+                             "photo":get_photo(parent),"preview":get_preview(parent)})
+            if len(articles) >= max_items: break
+
+    # Estrategia 3: todos los links válidos con texto suficiente
+    if not articles:
+        for a in soup.find_all("a", href=True):
+            href = a.get("href","")
+            if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
+            if not is_valid_article_url(href, base, min_dashes=2): continue
+            if href in seen: continue
+            seen.add(href)
+            title = " ".join(a.get_text(strip=True).split())
+            if not title or len(title) < 20 or len(title) > 250: continue
+            parent = a.find_parent(["div","li","article"])
+            articles.append({"url":href,"title":title,"sec":"General","source":source_name,
+                             "photo":get_photo(parent),"preview":""})
+            if len(articles) >= max_items: break
+
     return articles
 
 async def scrape_source(key: str):
@@ -800,25 +840,87 @@ async def scrape_source(key: str):
 
             # ── BARILOCHE INFORMA ──
             if src_type == "bariloche":
+                # Intentar con /noticias/ y con la home
                 candidates = extract_wp_articles(soup, src["base"], src["name"])
-                # Fallback: buscar todos los links válidos
+                if not candidates:
+                    # Intentar home
+                    try:
+                        r_home = await client.get(src["base"], headers=SITE_HEADERS)
+                        soup_home = BeautifulSoup(r_home.text, "html.parser")
+                        candidates = extract_wp_articles(soup_home, src["base"], src["name"])
+                    except Exception:
+                        pass
+                # Fallback: buscar todos los links válidos con min_dashes=1
                 if not candidates:
                     seen = set()
-                    for a in soup.find_all("a", href=True):
+                    soup_use = soup
+                    for a in soup_use.find_all("a", href=True):
                         href = a.get("href","")
-                        if not href.startswith("http"): href = src["base"] + href
-                        if not is_valid_article_url(href, src["base"]): continue
+                        if not href.startswith("http"): href = src["base"] + "/" + href.lstrip("/")
+                        if not is_valid_article_url(href, src["base"], min_dashes=1): continue
                         if href in seen: continue
                         seen.add(href)
                         heading = a.find(["h1","h2","h3","h4"])
                         title = (heading or a).get_text(strip=True)
                         title = " ".join(title.split())
                         if not title or len(title) < 20 or len(title) > 250: continue
-                        candidates.append({"url":href,"title":title,"sec":"Bariloche","source":src["name"],"photo":None,"preview":""})
+                        parent = a.find_parent(["article","div","li","section"])
+                        img = parent.find("img") if parent else None
+                        photo = None
+                        if img:
+                            for attr in ["src","data-src","data-lazy-src"]:
+                                raw = img.get(attr,"")
+                                if raw and not raw.startswith("data:") and len(raw)>10:
+                                    photo = raw if raw.startswith("http") else src["base"]+raw
+                                    break
+                        p_el = parent.find("p") if parent else None
+                        preview = " ".join(p_el.get_text(strip=True).split())[:150] if p_el else ""
+                        candidates.append({"url":href,"title":title,"sec":"Bariloche","source":src["name"],"photo":photo,"preview":preview})
                         if len(candidates) >= 20: break
                 articles = candidates[:20]
 
-            # ── WORDPRESS GENÉRICO (Quorum, Policía) ──
+            # ── POLICÍA RN ── (sitio propio, no WordPress)
+            elif src_type == "policia":
+                seen = set()
+                # Buscar links con /novedad en href
+                pat = src["pattern"]
+                all_links = soup.find_all("a", href=lambda h: h and pat in h)
+                # Si no hay, buscar cualquier link interno con título largo
+                if not all_links:
+                    all_links = soup.find_all("a", href=lambda h: h and src["base"] in (h if h.startswith("http") else ""))
+                for a in all_links:
+                    href = a.get("href","")
+                    url = href if href.startswith("http") else src["base"] + "/" + href.lstrip("/")
+                    if url in seen or len(url) < 20: continue
+                    seen.add(url)
+                    heading = a.find(["h1","h2","h3","h4","h5"])
+                    title = (heading or a).get_text(strip=True)
+                    title = " ".join(title.split())
+                    if not title or len(title) < 20 or len(title) > 250: continue
+                    parent = a.find_parent(["article","div","li","section"])
+                    img = parent.find("img") if parent else None
+                    photo = None
+                    if img:
+                        raw = img.get("src") or img.get("data-src","")
+                        if raw and not raw.startswith("data:"):
+                            photo = raw if raw.startswith("http") else src["base"]+raw
+                    p_el = parent.find("p") if parent else None
+                    preview = " ".join(p_el.get_text(strip=True).split())[:150] if p_el else ""
+                    sec_el = parent.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","section","tipo"])) if parent else None
+                    sec = sec_el.get_text(strip=True)[:30] if sec_el else "Policiales"
+                    articles.append({"url":url,"title":title,"sec":sec,"source":src["name"],"photo":photo,"preview":preview})
+                    if len(articles) >= 20: break
+                # Si sigue vacío, intentar con /novedades/
+                if not articles:
+                    try:
+                        r_nov = await client.get(src["base"]+"/novedades/", headers=SITE_HEADERS)
+                        soup_nov = BeautifulSoup(r_nov.text, "html.parser")
+                        wp_arts = extract_wp_articles(soup_nov, src["base"], src["name"])
+                        articles = wp_arts[:20]
+                    except Exception as ep:
+                        print(f"policia fallback error: {ep}")
+
+            # ── WORDPRESS GENÉRICO (Quorum) ──
             elif src_type == "wordpress":
                 articles = extract_wp_articles(soup, src["base"], src["name"])
                 # Si no encontró nada con article tags, buscar h2+a
@@ -828,13 +930,13 @@ async def scrape_source(key: str):
                         a_tag = h.find("a", href=True)
                         if not a_tag: continue
                         href = a_tag.get("href","")
-                        if not href.startswith("http"): href = src["base"] + href
+                        if not href.startswith("http"):
+                            href = src["base"].rstrip("/") + "/" + href.lstrip("/")
                         if not is_valid_article_url(href, src["base"], min_dashes=1): continue
                         if href in seen: continue
                         seen.add(href)
                         title = " ".join(h.get_text(strip=True).split())
                         if not title or len(title) < 15 or len(title) > 250: continue
-                        # Foto en el parent
                         parent = h.find_parent(["div","li","section"])
                         img = parent.find("img") if parent else None
                         photo = None
@@ -842,12 +944,21 @@ async def scrape_source(key: str):
                             for attr in ["src","data-src","data-lazy-src"]:
                                 raw = img.get(attr,"")
                                 if raw and not raw.startswith("data:") and len(raw) > 10:
-                                    photo = raw if raw.startswith("http") else src["base"] + raw
+                                    photo = raw if raw.startswith("http") else src["base"].rstrip("/")+"/"+raw.lstrip("/")
                                     break
                         p_el = parent.find("p") if parent else None
                         preview = " ".join(p_el.get_text(strip=True).split())[:160] if p_el else ""
-                        articles.append({"url":href,"title":title,"sec":"Legislativa","source":src["name"],"photo":photo,"preview":preview})
+                        sec = "Quorum" if key=="quorum" else "Policiales"
+                        articles.append({"url":href,"title":title,"sec":sec,"source":src["name"],"photo":photo,"preview":preview})
                         if len(articles) >= 20: break
+                # Fallback para policía: probar /novedades/
+                if not articles and key == "policia":
+                    try:
+                        r2 = await client.get(src["base"]+"/novedades/", headers=SITE_HEADERS)
+                        soup2 = BeautifulSoup(r2.text, "html.parser")
+                        articles = extract_wp_articles(soup2, src["base"], src["name"])
+                    except Exception:
+                        pass
 
             # ── PRENSA RÍO NEGRO ──
             else:
