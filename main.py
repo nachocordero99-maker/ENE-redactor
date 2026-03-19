@@ -47,12 +47,49 @@ HEADERS = {
 }
 
 SOURCES = {
-    "prensa":    {"name":"Prensa Río Negro",   "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar",  "pattern":"/articulo/",  "type":"silvercoder"},
-    "bariloche": {"name":"Bariloche Informa",  "url":"https://barilocheinforma.gob.ar/",                    "base":"https://barilocheinforma.gob.ar", "pattern":"barilocheinforma.gob.ar/","type":"bariloche"},
-    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/",                     "base":"https://policia.rionegro.gov.ar", "pattern":"/202",                    "type":"policia_wp"},
-    "quorum":    {"name":"Quorum Legislativo",  "url":"https://quorum.legisrn.gov.ar/",                     "base":"https://quorum.legisrn.gov.ar",   "pattern":"quorum.legisrn.gov.ar/", "type":"wordpress"},
-    "mpfiscal":  {"name":"Ministerio Público RN", "url":"https://ministeriopublico.jusrionegro.gov.ar/",       "base":"https://ministeriopublico.jusrionegro.gov.ar","pattern":"/novedades/",         "type":"mpfiscal"},
-    "neuquen":   {"name":"Neuquén Informa",        "url":"https://www.neuqueninforma.gob.ar/",                  "base":"https://www.neuqueninforma.gob.ar",  "pattern":"/noticias/",             "type":"silvercoder"},
+    # RSS — confiable, incluye fotos, nunca bloquea
+    "bariloche": {
+        "name": "Bariloche Informa",
+        "url":  "https://barilocheinforma.gob.ar/feed/",
+        "base": "https://barilocheinforma.gob.ar",
+        "type": "rss",
+    },
+    # Silvercoder CMS — mismo que Diario ENE
+    "prensa": {
+        "name": "Prensa Río Negro",
+        "url":  "https://prensa.rionegro.gov.ar/busqueda/articulo?q=",
+        "base": "https://prensa.rionegro.gov.ar",
+        "pattern": "/articulo/",
+        "type": "prensa",
+    },
+    # WordPress — feed RSS como método principal
+    "policia": {
+        "name": "Policía Río Negro",
+        "url":  "https://policia.rionegro.gov.ar/feed/",
+        "base": "https://policia.rionegro.gov.ar",
+        "type": "rss",
+    },
+    # WordPress estándar
+    "quorum": {
+        "name": "Quorum Legislativo",
+        "url":  "https://quorum.legisrn.gov.ar/",
+        "base": "https://quorum.legisrn.gov.ar",
+        "type": "wordpress",
+    },
+    # Neuquén Informa — mismo CMS que Prensa RN
+    "neuquen": {
+        "name": "Neuquén Informa",
+        "url":  "https://www.neuqueninforma.gob.ar/rss/general",
+        "base": "https://www.neuqueninforma.gob.ar",
+        "type": "rss",
+    },
+    # Ministerio Público RN — WordPress con RSS
+    "mpfiscal": {
+        "name": "Min. Público RN",
+        "url":  "https://ministeriopublico.jusrionegro.gov.ar/feed/",
+        "base": "https://ministeriopublico.jusrionegro.gov.ar",
+        "type": "rss",
+    },
 }
 
 HTML = r"""<!DOCTYPE html>
@@ -249,12 +286,12 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
   <div class="panel on" id="pa">
     <p style="font-size:13px;color:var(--ink2);margin-bottom:16px;">Seleccioná las fuentes, cargá las noticias y elegí las que querés redactar.</p>
     <div class="src-bar">
-      <label class="src-chip" id="sc-prensa"><input type="checkbox" value="prensa" onchange="toggleSrc(this,'sc-prensa')">📰 Prensa Río Negro</label>
       <label class="src-chip on" id="sc-bariloche"><input type="checkbox" value="bariloche" checked onchange="toggleSrc(this,'sc-bariloche')">🏔 Bariloche Informa</label>
+      <label class="src-chip" id="sc-prensa"><input type="checkbox" value="prensa" onchange="toggleSrc(this,'sc-prensa')">📰 Prensa RN</label>
       <label class="src-chip" id="sc-policia"><input type="checkbox" value="policia" onchange="toggleSrc(this,'sc-policia')">🚔 Policía RN</label>
       <label class="src-chip" id="sc-quorum"><input type="checkbox" value="quorum" onchange="toggleSrc(this,'sc-quorum')">🏛 Quorum</label>
-      <label class="src-chip" id="sc-mpfiscal"><input type="checkbox" value="mpfiscal" onchange="toggleSrc(this,'sc-mpfiscal')">⚖️ Ministerio Público</label>
       <label class="src-chip" id="sc-neuquen"><input type="checkbox" value="neuquen" onchange="toggleSrc(this,'sc-neuquen')">🏔 Neuquén Informa</label>
+      <label class="src-chip" id="sc-mpfiscal"><input type="checkbox" value="mpfiscal" onchange="toggleSrc(this,'sc-mpfiscal')">⚖️ Min. Público RN</label>
       <button class="btn" id="btn-load" onclick="loadNews()">Cargar noticias →</button>
     </div>
     <div id="cards-grid" class="cards-grid"></div>
@@ -743,131 +780,312 @@ SITE_HEADERS = {
     "Accept-Language": "es-AR,es;q=0.9",
 }
 
-# URLs a ignorar en el scraping
-IGNORE_PATTERNS = [
+# URLs a ignorar en scraping HTML
+IGNORE_FRAGMENTS = [
     "wordpress.org","elementor.com","wp-login","wp-admin","wp-content/themes",
-    "wp-content/plugins","#","javascript:","mailto:","tel:","feed/",
+    "wp-content/plugins","#","javascript:","mailto:","tel:",
     "page/","category/","tag/","author/","wp-json","xmlrpc",
     "?s=","?p=","/servicios","/inicio","/participacion",
     "google.com","facebook.com","twitter.com","instagram.com","youtube.com",
-    "wp-sitemap","privacy-policy","aviso-legal","contacto","sobre-nosotros",
+    "privacy-policy","aviso-legal","contacto","sobre-nosotros","wp-sitemap",
+    "feed/","rss","sitemap",
 ]
 
-def is_valid_article_url(url: str, base: str, min_dashes: int = 2) -> bool:
+def is_article_url(url: str, base: str, min_dashes: int = 2) -> bool:
+    """Valida si una URL parece ser un artículo real y no una página estática."""
     if not url.startswith("http"): return False
-    # Normalizar base para comparar (sin trailing slash, sin http/https diferencia)
-    base_norm = base.rstrip("/").replace("https://","").replace("http://","")
-    url_norm  = url.replace("https://","").replace("http://","")
-    if not url_norm.startswith(base_norm): return False
-    if any(p in url.lower() for p in IGNORE_PATTERNS): return False
-    slug = url_norm.replace(base_norm,"").strip("/").split("?")[0]
-    if len(slug) < 10: return False
+    if not url.startswith(base): return False
+    if any(p in url.lower() for p in IGNORE_FRAGMENTS): return False
+    slug = url.replace(base, "").strip("/").split("?")[0]
+    if len(slug) < 8: return False
     if slug.count("-") < min_dashes: return False
     return True
 
-def extract_wp_articles(soup, base: str, source_name: str, max_items: int = 20):
-    """Scraper genérico para sitios WordPress."""
+def get_img_from_tag(img_tag, base: str) -> str | None:
+    """Extrae la URL de imagen de un tag img intentando múltiples atributos."""
+    if not img_tag: return None
+    for attr in ["src", "data-src", "data-lazy-src", "data-original", "data-lazy"]:
+        raw = img_tag.get(attr, "")
+        if not raw or raw.startswith("data:") or len(raw) < 10: continue
+        # srcset puede tener varias URLs — tomar la primera
+        if " " in raw: raw = raw.split()[0]
+        if raw.startswith("//"): raw = "https:" + raw
+        if raw.startswith("/"): raw = base.rstrip("/") + raw
+        if raw.startswith("http"): return raw
+    return None
+
+def parse_rss(xml_text: str, source_name: str, base: str) -> list:
+    """Parsea un feed RSS/Atom y extrae artículos con foto."""
+    from xml.etree import ElementTree as ET
+    articles = []
+    try:
+        root = ET.fromstring(xml_text)
+        # Namespaces comunes en RSS
+        ns = {
+            "media": "http://search.yahoo.com/mrss/",
+            "content": "http://purl.org/rss/1.0/modules/content/",
+            "dc": "http://purl.org/dc/elements/1.1/",
+        }
+        items = root.findall(".//item")
+        for item in items:
+            # URL
+            link = item.findtext("link", "").strip()
+            if not link or not link.startswith("http"): continue
+            # Título
+            title = item.findtext("title", "").strip()
+            if not title or len(title) < 15: continue
+            # Preview/descripción — limpiar HTML
+            desc_raw = item.findtext("description", "") or ""
+            soup_desc = BeautifulSoup(desc_raw, "html.parser")
+            preview = " ".join(soup_desc.get_text(strip=True).split())[:200]
+            # Categoría
+            cat_el = item.find("category")
+            sec = cat_el.text.strip() if cat_el is not None and cat_el.text else "General"
+            # Foto — intentar media:content primero (WordPress lo usa)
+            photo = None
+            media_content = item.find("media:content", ns)
+            if media_content is not None:
+                photo = media_content.get("url", "")
+            # Fallback: buscar img dentro del content:encoded o description
+            if not photo:
+                encoded = item.findtext("content:encoded", "", ns) or desc_raw
+                soup_enc = BeautifulSoup(encoded, "html.parser")
+                img = soup_enc.find("img")
+                if img:
+                    photo = get_img_from_tag(img, base)
+            # Fallback: enclosure
+            if not photo:
+                enclosure = item.find("enclosure")
+                if enclosure is not None and "image" in enclosure.get("type",""):
+                    photo = enclosure.get("url","")
+            articles.append({
+                "url": link,
+                "title": title,
+                "sec": sec,
+                "source": source_name,
+                "photo": photo or None,
+                "preview": preview,
+            })
+            if len(articles) >= 20: break
+    except Exception as e:
+        print(f"RSS parse error: {e}")
+    return articles
+
+def extract_wp_articles(soup, base: str, source_name: str, max_items: int = 20) -> list:
+    """
+    Extrae artículos de un sitio WordPress.
+    Estrategia: article tags → h2/h3 con links → links con año en URL.
+    """
     articles = []
     seen = set()
-    base_domain = base.replace("https://","").replace("http://","").rstrip("/")
 
-    def get_photo(container):
-        if not container: return None
-        img = container.find("img")
-        if not img: return None
-        for attr in ["src","data-src","data-lazy-src","data-original","data-lazy"]:
-            raw = img.get(attr,"")
-            if raw and not raw.startswith("data:") and len(raw) > 10:
-                return raw if raw.startswith("http") else base + raw
-        return None
-
-    def get_preview(container):
-        if not container: return ""
-        p = container.find("p")
-        return " ".join(p.get_text(strip=True).split())[:160] if p else ""
-
-    # Estrategia 1: article tags
-    for article in soup.find_all("article", limit=40):
+    # Estrategia 1: article tags (WordPress estándar)
+    for article in soup.find_all("article", limit=50):
         a_tag = article.find("a", href=True)
         if not a_tag: continue
-        href = a_tag.get("href","")
+        href = a_tag.get("href", "")
         if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
-        if not is_valid_article_url(href, base): continue
+        if not is_article_url(href, base): continue
         if href in seen: continue
         seen.add(href)
         heading = article.find(["h1","h2","h3","h4"])
-        title = heading.get_text(strip=True) if heading else a_tag.get_text(strip=True)
-        title = " ".join(title.split())
-        if not title or len(title) < 20 or len(title) > 250: continue
-        cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","tag","section"]))
-        sec = cat_el.get_text(strip=True)[:30] if cat_el else "General"
-        articles.append({"url":href,"title":title,"sec":sec,"source":source_name,
-                         "photo":get_photo(article),"preview":get_preview(article)})
+        title = " ".join((heading or a_tag).get_text(strip=True).split())
+        if not title or len(title) < 15 or len(title) > 250: continue
+        photo = get_img_from_tag(article.find("img"), base)
+        cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","entry-meta","tag"]))
+        sec = cat_el.get_text(strip=True)[:40].strip() if cat_el else "General"
+        if len(sec) > 40 or sec.count(" ") > 4: sec = "General"
+        p_el = article.find("p")
+        preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
+        articles.append({"url":href,"title":title,"sec":sec,"source":source_name,"photo":photo,"preview":preview})
         if len(articles) >= max_items: break
 
-    # Estrategia 2: h2/h3 con link directo (si strategy 1 no encontró nada)
+    # Estrategia 2: h2/h3 con link interno (algunos temas no usan article)
     if not articles:
         for h in soup.find_all(["h2","h3"], limit=60):
             a_tag = h.find("a", href=True)
             if not a_tag: continue
-            href = a_tag.get("href","")
+            href = a_tag.get("href", "")
             if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
-            if base_domain not in href: continue
-            if not is_valid_article_url(href, base, min_dashes=1): continue
+            if not is_article_url(href, base, min_dashes=1): continue
             if href in seen: continue
             seen.add(href)
             title = " ".join(h.get_text(strip=True).split())
             if not title or len(title) < 15 or len(title) > 250: continue
             parent = h.find_parent(["div","li","section","article"])
-            articles.append({"url":href,"title":title,"sec":"General","source":source_name,
-                             "photo":get_photo(parent),"preview":get_preview(parent)})
+            photo = get_img_from_tag(parent.find("img") if parent else None, base)
+            p_el = parent.find("p") if parent else None
+            preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
+            articles.append({"url":href,"title":title,"sec":"General","source":source_name,"photo":photo,"preview":preview})
             if len(articles) >= max_items: break
 
-    # Estrategia 3: todos los links válidos con texto suficiente
+    # Estrategia 3: cualquier link interno con slug largo (último recurso)
     if not articles:
-        for a in soup.find_all("a", href=True):
+        import re as _re
+        year_pat = _re.compile(r'/(19|20)\d{2}/')
+        for a in soup.find_all("a", href=True, limit=200):
             href = a.get("href","")
             if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
-            if not is_valid_article_url(href, base, min_dashes=2): continue
+            if not href.startswith(base): continue
             if href in seen: continue
+            # Solo URLs con año o slug largo
+            slug = href.replace(base,"").strip("/")
+            if len(slug) < 15 or slug.count("-") < 2: continue
+            if any(p in href.lower() for p in IGNORE_FRAGMENTS): continue
             seen.add(href)
             title = " ".join(a.get_text(strip=True).split())
             if not title or len(title) < 20 or len(title) > 250: continue
-            parent = a.find_parent(["div","li","article"])
-            articles.append({"url":href,"title":title,"sec":"General","source":source_name,
-                             "photo":get_photo(parent),"preview":""})
+            parent = a.find_parent(["div","li","article","section"])
+            photo = get_img_from_tag(parent.find("img") if parent else None, base)
+            articles.append({"url":href,"title":title,"sec":"General","source":source_name,"photo":photo,"preview":""})
             if len(articles) >= max_items: break
 
-    # Si hay pocos resultados, intentar con og:image del meta
-    # (algunos WP no tienen article tags pero sí meta og)
-    if not articles:
-        # Buscar h2 con links dentro
-        seen_h = set()
-        for h in soup.find_all(["h2","h3"], limit=50):
-            a_tag = h.find("a", href=True)
-            if not a_tag: continue
-            href = a_tag.get("href","")
-            if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
-            if not is_valid_article_url(href, base, min_dashes=1): continue
-            if href in seen_h: continue
-            seen_h.add(href)
-            title = " ".join(h.get_text(strip=True).split())
-            if not title or len(title) < 15 or len(title) > 250: continue
-            parent = h.find_parent(["div","li","section","article"])
-            img = parent.find("img") if parent else None
-            photo = None
-            if img:
-                for attr in ["src","data-src","data-lazy-src","data-original"]:
-                    raw = img.get(attr,"")
-                    if raw and not raw.startswith("data:") and len(raw) > 15:
-                        if " " in raw: raw = raw.split()[0]
-                        photo = raw if raw.startswith("http") else base + raw
-                        break
-            p_el = parent.find("p") if parent else None
-            preview = " ".join(p_el.get_text(strip=True).split())[:150] if p_el else ""
-            articles.append({"url":href,"title":title,"sec":"General","source":source_name,"photo":photo,"preview":preview})
-            if len(articles) >= max_items: break
     return articles
+
+def extract_barilocheopina(soup, base: str, source_name: str) -> list:
+    """
+    Bariloche Opina tiene URLs con /noticias/YYYY/MM/DD/ID-titulo.
+    """
+    import re as _re
+    articles = []
+    seen = set()
+    pat = _re.compile(r'/noticias/\d{4}/\d{2}/\d{2}/\d+-.+')
+    for a in soup.find_all("a", href=True, limit=300):
+        href = a.get("href","")
+        if not href.startswith("http"): href = base.rstrip("/") + href
+        if not pat.search(href): continue
+        if href in seen: continue
+        seen.add(href)
+        # Buscar título
+        parent = a.find_parent(["article","div","li","section"])
+        heading = (parent or a).find(["h1","h2","h3","h4"]) if parent else a
+        title = " ".join((heading or a).get_text(strip=True).split())
+        if not title or len(title) < 15 or len(title) > 250: continue
+        photo = get_img_from_tag(parent.find("img") if parent else None, base)
+        # Categoría
+        cat = parent.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","section"])) if parent else None
+        sec = cat.get_text(strip=True)[:30] if cat else "Bariloche"
+        p_el = parent.find("p") if parent else None
+        preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
+        articles.append({"url":href,"title":title,"sec":sec,"source":source_name,"photo":photo,"preview":preview})
+        if len(articles) >= 20: break
+    return articles
+
+
+async def scrape_source(key: str) -> list:
+    """
+    Scraper principal. Selecciona la estrategia según el tipo de fuente.
+    Siempre devuelve lista de dicts con: url, title, sec, source, photo, preview.
+    """
+    if key not in SOURCES:
+        return []
+    src = SOURCES[key]
+    articles = []
+    src_type = src.get("type", "wordpress")
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=20,
+            follow_redirects=True,
+            verify=False,
+            headers=SITE_HEADERS,
+        ) as client:
+            r = await client.get(src["url"])
+
+            # ── RSS ──────────────────────────────────────────────────────────
+            if src_type == "rss":
+                articles = parse_rss(r.text, src["name"], src["base"])
+
+            # ── PRENSA RÍO NEGRO (silvercoder CMS) ───────────────────────────
+            elif src_type == "prensa":
+                soup = BeautifulSoup(r.text, "html.parser")
+                seen = set()
+                pat = src.get("pattern", "/articulo/")
+                for a in soup.find_all("a", href=lambda h: h and pat in (h or "")):
+                    href = a.get("href","")
+                    url = href if href.startswith("http") else src["base"] + href
+                    if url in seen or len(url) < 20: continue
+                    seen.add(url)
+                    heading = a.find(["h2","h3","h4","h5"]) or a
+                    title = " ".join(heading.get_text(strip=True).split())
+                    if not title or len(title) < 20 or len(title) > 250: continue
+                    parent = a.find_parent(["article","div","li"])
+                    # Foto — silvercoder usa _next/image con url param
+                    photo = None
+                    if parent:
+                        img = parent.find("img")
+                        if img:
+                            raw = img.get("src","") or img.get("data-src","")
+                            if "/_next/image" in raw:
+                                import urllib.parse as _up
+                                params = _up.parse_qs(_up.urlparse(raw).query)
+                                photo = _up.unquote(params.get("url",[""])[0]) or None
+                            elif raw.startswith("http") and "data:image" not in raw:
+                                photo = raw
+                    sec_el = parent.find("h6") if parent else None
+                    import re as _re
+                    sec = _re.sub(r'[0-9]+\s+de\s+[a-z]+\s+de\s+[0-9]{4}','',sec_el.get_text(strip=True)).strip() if sec_el else "—"
+                    p_el = parent.find("p") if parent else None
+                    preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
+                    articles.append({"url":url,"title":title,"sec":sec,"source":src["name"],"photo":photo,"preview":preview})
+                    if len(articles) >= 20: break
+
+            # ── BARILOCHE OPINA (URLs /noticias/YYYY/MM/DD/ID) ───────────────
+            elif src_type == "barilocheopina":
+                soup = BeautifulSoup(r.text, "html.parser")
+                articles = extract_barilocheopina(soup, src["base"], src["name"])
+
+            # ── WORDPRESS GENÉRICO ───────────────────────────────────────────
+            elif src_type == "wordpress":
+                soup = BeautifulSoup(r.text, "html.parser")
+                articles = extract_wp_articles(soup, src["base"], src["name"])
+                # Si no encontró nada, intentar con /feed/ RSS
+                if not articles:
+                    try:
+                        r_rss = await client.get(src["base"].rstrip("/") + "/feed/")
+                        articles = parse_rss(r_rss.text, src["name"], src["base"])
+                    except Exception:
+                        pass
+
+            else:
+                soup = BeautifulSoup(r.text, "html.parser")
+                articles = extract_wp_articles(soup, src["base"], src["name"])
+
+    except Exception as e:
+        print(f"scrape_source [{key}] error: {e}")
+
+    return articles
+
+
+# ── MODELOS ──
+class Article(BaseModel):
+    url: str = ""
+    title: str = ""
+    text: str = ""
+
+class GenerateRequest(BaseModel):
+    articles: list[Article]
+    seccion: str = ""
+    tono: str = "informativo"
+    extras: dict = {}
+
+# ── SCRAPER ──
+SITE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "es-AR,es;q=0.9",
+}
+
+# URLs a ignorar en scraping HTML
+IGNORE_FRAGMENTS = [
+    "wordpress.org","elementor.com","wp-login","wp-admin","wp-content/themes",
+    "wp-content/plugins","#","javascript:","mailto:","tel:",
+    "page/","category/","tag/","author/","wp-json","xmlrpc",
+    "?s=","?p=","/servicios","/inicio","/participacion",
+    "google.com","facebook.com","twitter.com","instagram.com","youtube.com",
+    "privacy-policy","aviso-legal","contacto","sobre-nosotros","wp-sitemap",
+    "feed/","rss","sitemap",
+]
 
 async def scrape_source(key: str):
     src = SOURCES[key]
@@ -1026,7 +1244,7 @@ async def scrape_source(key: str):
                     sec = "—"
                     if parent:
                         h6 = parent.find("h6")
-                        if h6: sec = re.sub(r'\d+\s+de\s+\w+\s+de\s+\d{4}','',h6.get_text(strip=True)).strip()
+                        if h6: sec = re.sub(r'[0-9]+\s+de\s+[a-z]+\s+de\s+[0-9]{4}','',h6.get_text(strip=True)).strip()
                     # Foto
                     img_el = parent.find("img") if parent else None
                     photo = None
