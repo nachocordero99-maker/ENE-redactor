@@ -49,10 +49,10 @@ HEADERS = {
 SOURCES = {
     "prensa":    {"name":"Prensa Río Negro",   "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar",  "pattern":"/articulo/",  "type":"silvercoder"},
     "bariloche": {"name":"Bariloche Informa",  "url":"https://barilocheinforma.gob.ar/",                    "base":"https://barilocheinforma.gob.ar", "pattern":"barilocheinforma.gob.ar/","type":"bariloche"},
-    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/",                     "base":"https://policia.rionegro.gov.ar", "pattern":"policia.rionegro.gov.ar/", "type":"wordpress"},
+    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/",                     "base":"https://policia.rionegro.gov.ar", "pattern":"/202",                    "type":"policia_wp"},
     "quorum":    {"name":"Quorum Legislativo",  "url":"https://quorum.legisrn.gov.ar/",                     "base":"https://quorum.legisrn.gov.ar",   "pattern":"quorum.legisrn.gov.ar/", "type":"wordpress"},
     "mpfiscal":  {"name":"Ministerio Público RN", "url":"https://ministeriopublico.jusrionegro.gov.ar/",       "base":"https://ministeriopublico.jusrionegro.gov.ar","pattern":"/novedades/",         "type":"mpfiscal"},
-    "neuquen":   {"name":"Neuquén Informa",        "url":"https://www.neuqueninforma.gob.ar/",                  "base":"https://www.neuqueninforma.gob.ar",  "pattern":"/noticias/",             "type":"neuquen"},
+    "neuquen":   {"name":"Neuquén Informa",        "url":"https://www.neuqueninforma.gob.ar/",                  "base":"https://www.neuqueninforma.gob.ar",  "pattern":"/noticias/",             "type":"silvercoder"},
 }
 
 HTML = r"""<!DOCTYPE html>
@@ -559,16 +559,23 @@ async function generateAll(){
     panelsEl.appendChild(panel);
   }
 
+  // Enriquecer textos en SERIE primero para no saturar el scraper
+  for(let i=0;i<snapshot.length;i++){
+    const item=snapshot[i];
+    if(!item.text&&item.url){
+      try{
+        const r=await fetch('/articulo?url='+encodeURIComponent(item.url));
+        const d=await r.json();
+        snapshot[i].text=d.text||'';
+        snapshot[i].photo=snapshot[i].photo||d.photo||null;
+      }catch(e){ console.warn('fetch articulo error',e); }
+    }
+  }
+
+  // Generar notas en paralelo (ya con texto completo)
   await Promise.all(snapshot.map(async (item,i)=>{
     try{
       let text=item.text; let photo=item.photo;
-      if(!text&&item.url){
-        try{
-          const r=await fetch('/articulo?url='+encodeURIComponent(item.url));
-          const d=await r.json();
-          text=d.text||''; photo=photo||d.photo||null;
-        }catch(e){}
-      }
       const kw=item.title.split(' ').slice(0,4).join(' ');
       const photosData=await fetch('/fotos?q='+encodeURIComponent(kw)).then(r=>r.json()).catch(()=>({photos:[]}));
       const r=await fetch('/generar',{
@@ -831,6 +838,35 @@ def extract_wp_articles(soup, base: str, source_name: str, max_items: int = 20):
                              "photo":get_photo(parent),"preview":""})
             if len(articles) >= max_items: break
 
+    # Si hay pocos resultados, intentar con og:image del meta
+    # (algunos WP no tienen article tags pero sí meta og)
+    if not articles:
+        # Buscar h2 con links dentro
+        seen_h = set()
+        for h in soup.find_all(["h2","h3"], limit=50):
+            a_tag = h.find("a", href=True)
+            if not a_tag: continue
+            href = a_tag.get("href","")
+            if not href.startswith("http"): href = base.rstrip("/") + "/" + href.lstrip("/")
+            if not is_valid_article_url(href, base, min_dashes=1): continue
+            if href in seen_h: continue
+            seen_h.add(href)
+            title = " ".join(h.get_text(strip=True).split())
+            if not title or len(title) < 15 or len(title) > 250: continue
+            parent = h.find_parent(["div","li","section","article"])
+            img = parent.find("img") if parent else None
+            photo = None
+            if img:
+                for attr in ["src","data-src","data-lazy-src","data-original"]:
+                    raw = img.get(attr,"")
+                    if raw and not raw.startswith("data:") and len(raw) > 15:
+                        if " " in raw: raw = raw.split()[0]
+                        photo = raw if raw.startswith("http") else base + raw
+                        break
+            p_el = parent.find("p") if parent else None
+            preview = " ".join(p_el.get_text(strip=True).split())[:150] if p_el else ""
+            articles.append({"url":href,"title":title,"sec":"General","source":source_name,"photo":photo,"preview":preview})
+            if len(articles) >= max_items: break
     return articles
 
 async def scrape_source(key: str):
@@ -855,6 +891,15 @@ async def scrape_source(key: str):
                     except Exception:
                         pass
                 # Fallback: buscar todos los links válidos con min_dashes=1
+                if not candidates:
+                    seen = set()
+                    # Intentar con /categoria/noticias/ que es donde WordPress pone las notas
+                    try:
+                        r_cat = await client.get(src["base"]+"/category/noticias/", headers=SITE_HEADERS)
+                        soup_cat = BeautifulSoup(r_cat.text, "html.parser")
+                        candidates = extract_wp_articles(soup_cat, src["base"], src["name"])
+                    except Exception:
+                        pass
                 if not candidates:
                     seen = set()
                     soup_use = soup
