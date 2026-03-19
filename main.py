@@ -265,7 +265,6 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
       <label class="src-chip" id="sc-bariloche"><input type="checkbox" value="bariloche" onchange="toggleSrc(this,'sc-bariloche')">🏔 Bariloche Informa</label>
       <label class="src-chip" id="sc-policia"><input type="checkbox" value="policia" onchange="toggleSrc(this,'sc-policia')">🚔 Policía RN</label>
       <label class="src-chip" id="sc-quorum"><input type="checkbox" value="quorum" onchange="toggleSrc(this,'sc-quorum')">🏛 Quorum Legislativo</label>
-      <label class="src-chip" id="sc-quorum"><input type="checkbox" value="quorum" onchange="toggleSrc(this,'sc-quorum')">⚖️ Quorum Legislativo</label>
 
       <button class="btn" id="btn-load" onclick="loadNews()">Cargar noticias →</button>
     </div>
@@ -510,11 +509,18 @@ function renderCards(){
     </div>`).join('');
   $('sel-footer').style.display='flex';
 }
-function toggleCard(i,e){
-  // Click derecho o en el preview abre modal, click izquierdo selecciona
+function toggleCard(i){
   portalSelected.has(i)?portalSelected.delete(i):portalSelected.add(i);
   $('sel-n').textContent=portalSelected.size;
   $('btn-pass').disabled=portalSelected.size===0;
+  renderCards();
+}
+function toggleCardFromModal(i){
+  portalSelected.has(i)?portalSelected.delete(i):portalSelected.add(i);
+  $('sel-n').textContent=portalSelected.size;
+  $('btn-pass').disabled=portalSelected.size===0;
+  const btn=$('modal-sel-btn');
+  if(btn) btn.textContent=portalSelected.has(i)?'Quitar selección':'Seleccionar';
   renderCards();
 }
 function showPreview(i,e){
@@ -532,7 +538,7 @@ function showPreview(i,e){
       <div style="font-family:'Instrument Serif',serif;font-size:20px;line-height:1.3;color:var(--ink);margin-bottom:10px">${esc(a.title||'')}</div>
       ${a.preview?`<div style="font-size:13px;color:var(--ink3);line-height:1.7;margin-bottom:14px">${esc(a.preview)}</div>`:''}
       <div style="display:flex;gap:8px">
-        <button onclick="toggleCard(${i},event);$('card-modal').remove()" style="padding:8px 16px;background:var(--blue2);color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${portalSelected.has(${i})?'Quitar selección':'Seleccionar nota'}</button>
+        <button id="modal-sel-btn" onclick="toggleCardFromModal(${i})" style="padding:8px 16px;background:var(--blue2);color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${portalSelected.has(i)?'Quitar selección':'Seleccionar'}</button>
         <button onclick="$('card-modal').remove()" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:4px;font-size:12px;cursor:pointer;font-family:inherit">Cerrar</button>
         <a href="${esc(a.url)}" target="_blank" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:4px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;color:var(--ink3)">Ver nota →</a>
       </div>
