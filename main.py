@@ -47,9 +47,10 @@ HEADERS = {
 }
 
 SOURCES = {
-    "prensa":    {"name":"Prensa Río Negro",  "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar", "pattern":"/articulo/"},
-    "bariloche": {"name":"Bariloche Informa", "url":"https://barilocheinforma.gob.ar/noticias/",            "base":"https://barilocheinforma.gob.ar","pattern":"barilocheinforma.gob.ar/"},
-    "policia":   {"name":"Policía Río Negro", "url":"https://policia.rionegro.gov.ar",                     "base":"https://policia.rionegro.gov.ar","pattern":None},
+    "prensa":    {"name":"Prensa Río Negro",   "url":"https://prensa.rionegro.gov.ar/busqueda/articulo?q=", "base":"https://prensa.rionegro.gov.ar",  "pattern":"/articulo/",  "type":"silvercoder"},
+    "bariloche": {"name":"Bariloche Informa",  "url":"https://barilocheinforma.gob.ar/noticias/",           "base":"https://barilocheinforma.gob.ar", "pattern":"barilocheinforma.gob.ar/","type":"wordpress"},
+    "policia":   {"name":"Policía Río Negro",  "url":"https://policia.rionegro.gov.ar/category/noticias/",  "base":"https://policia.rionegro.gov.ar", "pattern":"/policia.rionegro.gov.ar/",  "type":"wordpress"},
+    "quorum":    {"name":"Quorum Legislativo", "url":"https://quorum.legisrn.gov.ar/",                      "base":"https://quorum.legisrn.gov.ar",   "pattern":"quorum.legisrn.gov.ar/","type":"wordpress"},
 }
 
 HTML = r"""<!DOCTYPE html>
@@ -89,6 +90,8 @@ header{background:var(--ink);border-bottom:3px solid var(--blue);padding:10px 24
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
 .card{border:1px solid var(--border);border-radius:var(--r);cursor:pointer;background:#fff;overflow:hidden;position:relative;transition:border-color .15s;}
 .card:hover{border-color:var(--blue2);}
+.card:hover .card-preview{display:-webkit-box;}
+.card-preview{display:none;}
 .card.sel{border:2px solid var(--blue2);box-shadow:0 0 0 3px rgba(58,184,232,.12);}
 .card-chk{position:absolute;top:8px;right:8px;width:22px;height:22px;background:var(--blue2);color:#fff;border-radius:50%;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center;}
 .card.sel .card-chk{display:flex;}
@@ -98,11 +101,39 @@ header{background:var(--ink);border-bottom:3px solid var(--blue);padding:10px 24
 .card-src{font-size:10px;color:var(--ink3);margin-top:4px;}
 .card-img{width:100%;height:90px;object-fit:cover;display:block;background:var(--paper3);}
 .card-preview{font-size:11px;color:var(--ink3);line-height:1.5;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+/* Modal preview */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(4,8,15,.6);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.on{display:flex;}
+.modal-box{background:#fff;border-radius:6px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.modal-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;position:sticky;top:0;background:#fff;}
+.modal-title{font-size:14px;font-weight:600;color:var(--ink);line-height:1.4;flex:1;}
+.modal-close{font-size:18px;color:var(--ink3);cursor:pointer;background:none;border:none;padding:0;line-height:1;flex-shrink:0;}
+.modal-close:hover{color:var(--ink);}
+.modal-img{width:100%;height:160px;object-fit:cover;display:block;}
+.modal-body{padding:14px 18px;}
+.modal-sec{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--blue2);margin-bottom:8px;}
+.modal-text{font-size:13px;color:var(--ink2);line-height:1.8;white-space:pre-wrap;}
+.modal-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#fff;}
 .sel-footer{margin-top:18px;padding:12px 16px;background:var(--paper2);border:1px solid var(--border);border-radius:var(--r);display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .sel-info{font-size:13px;color:var(--ink2);}
 .sel-info b{color:var(--blue2);}
 .skl{background:linear-gradient(90deg,var(--paper2) 25%,var(--paper3) 50%,var(--paper2) 75%);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:var(--r);height:90px;}
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.preview-btn{position:absolute;bottom:8px;right:8px;font-size:9px;padding:3px 8px;background:var(--blue2);color:#fff;border:none;border-radius:3px;cursor:pointer;opacity:0;transition:opacity .15s;font-family:'DM Sans',sans-serif;z-index:2;}
+.card:hover .preview-btn{opacity:1;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(4,8,15,.6);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.on{display:flex;}
+.modal-box{background:#fff;border-radius:var(--r);max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.3);}
+.modal-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;position:sticky;top:0;background:#fff;z-index:1;}
+.modal-title{font-size:14px;font-weight:600;color:var(--ink);line-height:1.4;flex:1;}
+.modal-close{background:transparent;border:none;font-size:18px;color:var(--ink3);cursor:pointer;flex-shrink:0;padding:0 4px;}
+.modal-close:hover{color:var(--ink);}
+.modal-body{padding:18px;}
+.modal-img{width:100%;max-height:220px;object-fit:cover;border-radius:var(--r);margin-bottom:14px;display:block;}
+.modal-meta{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.modal-tag{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border-radius:2px;background:var(--paper2);color:var(--blue2);}
+.modal-text{font-size:13px;color:var(--ink2);line-height:1.8;}
+.modal-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#fff;}
 
 /* REDACTOR */
 .gen-layout{display:grid;grid-template-columns:280px 1fr;gap:24px;}
@@ -233,6 +264,9 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
       <label class="src-chip on" id="sc-prensa"><input type="checkbox" value="prensa" checked onchange="toggleSrc(this,'sc-prensa')">📰 Prensa Río Negro</label>
       <label class="src-chip" id="sc-bariloche"><input type="checkbox" value="bariloche" onchange="toggleSrc(this,'sc-bariloche')">🏔 Bariloche Informa</label>
       <label class="src-chip" id="sc-policia"><input type="checkbox" value="policia" onchange="toggleSrc(this,'sc-policia')">🚔 Policía RN</label>
+      <label class="src-chip" id="sc-quorum"><input type="checkbox" value="quorum" onchange="toggleSrc(this,'sc-quorum')">🏛 Quorum Legislativo</label>
+      <label class="src-chip" id="sc-quorum"><input type="checkbox" value="quorum" onchange="toggleSrc(this,'sc-quorum')">⚖️ Quorum Legislativo</label>
+
       <button class="btn" id="btn-load" onclick="loadNews()">Cargar noticias →</button>
     </div>
     <div id="cards-grid" class="cards-grid"></div>
@@ -241,6 +275,25 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
       <div style="display:flex;gap:8px">
         <button class="btn-sec" onclick="clearSel()">Limpiar</button>
         <button class="btn" id="btn-pass" disabled onclick="passToRedactor()">Redactar notas seleccionadas →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PREVIEW -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-box" id="modal-box">
+      <div class="modal-hdr">
+        <div class="modal-title" id="modal-title"></div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-img" class="modal-img" src="" style="display:none" onerror="this.style.display='none'">
+        <div class="modal-meta" id="modal-meta"></div>
+        <div class="modal-text" id="modal-text"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sec" onclick="closeModal()">Cerrar</button>
+        <button class="btn" id="modal-select-btn" onclick="modalSelect()">+ Agregar al redactor →</button>
       </div>
     </div>
   </div>
@@ -335,6 +388,25 @@ select{width:100%;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12
   </div>
 </div>
 
+<!-- MODAL PREVIEW -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal-box" id="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-title" id="modal-title"></div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <img id="modal-img" class="modal-img" src="" alt="" style="display:none" onerror="this.style.display='none'">
+    <div class="modal-body">
+      <div class="modal-sec" id="modal-sec"></div>
+      <div class="modal-text" id="modal-text">Cargando…</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-sec" onclick="closeModalDirect()">Cerrar</button>
+      <button class="btn" id="modal-add-btn">+ Agregar a la cola →</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -367,6 +439,63 @@ async function loadNews(){
   st(portalArticles.length+' noticias');
   renderCards();
 }
+// ── MODAL PREVIEW ──
+let modalCurrentIdx = null;
+function showPreview(e, idx){
+  e.stopPropagation();
+  const a = portalArticles[idx];
+  modalCurrentIdx = idx;
+  $('modal-title').textContent = a.title||'';
+  const img = $('modal-img');
+  if(a.photo){ img.src=a.photo; img.style.display='block'; } else { img.style.display='none'; }
+  $('modal-meta').innerHTML = [
+    a.sec&&a.sec!=='—'?`<span class="modal-tag">${esc(a.sec)}</span>`:'',
+    a.source?`<span class="modal-tag" style="background:var(--paper);color:var(--ink3)">${esc(a.source)}</span>`:'',
+    a.date?`<span class="modal-tag" style="background:var(--paper);color:var(--ink3)">${esc(a.date)}</span>`:'',
+  ].filter(Boolean).join('');
+  // Show preview text or loading
+  const previewEl = $('modal-text');
+  if(a.fullText){
+    previewEl.textContent = a.fullText;
+  } else if(a.preview){
+    previewEl.textContent = a.preview + '…';
+    // Try to load full text in background
+    fetch(`/articulo?url=${encodeURIComponent(a.url)}`)
+      .then(r=>r.json())
+      .then(d=>{ if(d.text){ a.fullText=d.text; previewEl.textContent=d.text.slice(0,800)+'…'; }})
+      .catch(()=>{});
+  } else {
+    previewEl.textContent = 'Cargando preview…';
+    fetch(`/articulo?url=${encodeURIComponent(a.url)}`)
+      .then(r=>r.json())
+      .then(d=>{ if(d.text){ a.fullText=d.text; previewEl.textContent=d.text.slice(0,800)+'…'; }})
+      .catch(()=>{ previewEl.textContent='No se pudo cargar el preview.'; });
+  }
+  // Update select button state
+  const btn=$('modal-select-btn');
+  const already = portalSelected.has(idx);
+  btn.textContent = already?'✓ Ya seleccionada':'+ Agregar al redactor →';
+  btn.disabled = already;
+  $('modal-overlay').classList.add('on');
+}
+function closeModal(e){
+  if(e && e.target !== $('modal-overlay')) return;
+  $('modal-overlay').classList.remove('on');
+  modalCurrentIdx = null;
+}
+function modalSelect(){
+  if(modalCurrentIdx===null) return;
+  portalSelected.add(modalCurrentIdx);
+  $('sel-n').textContent=portalSelected.size;
+  $('btn-pass').disabled=false;
+  $('sel-footer').style.display='flex';
+  renderCards();
+  $('modal-select-btn').textContent='✓ Seleccionada';
+  $('modal-select-btn').disabled=true;
+}
+// Close with Escape
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal({target:$('modal-overlay')}); });
+
 function renderCards(){
   const g=$('cards-grid');
   if(!portalArticles.length){ g.innerHTML='<p style="color:var(--ink3);font-size:13px;grid-column:1/-1">Sin noticias. Verificá el backend.</p>'; return; }
@@ -381,7 +510,83 @@ function renderCards(){
     </div>`).join('');
   $('sel-footer').style.display='flex';
 }
-function toggleCard(i){ portalSelected.has(i)?portalSelected.delete(i):portalSelected.add(i); $('sel-n').textContent=portalSelected.size; $('btn-pass').disabled=portalSelected.size===0; renderCards(); }
+function toggleCard(i,e){
+  // Click derecho o en el preview abre modal, click izquierdo selecciona
+  portalSelected.has(i)?portalSelected.delete(i):portalSelected.add(i);
+  $('sel-n').textContent=portalSelected.size;
+  $('btn-pass').disabled=portalSelected.size===0;
+  renderCards();
+}
+function showPreview(i,e){
+  e.stopPropagation();
+  const a=portalArticles[i];
+  const existing=$('card-modal');
+  if(existing) existing.remove();
+  const m=document.createElement('div');
+  m.id='card-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(4,8,15,.6);z-index:999;display:flex;align-items:center;justify-content:center;padding:24px;';
+  m.innerHTML=`<div style="background:#fff;border-radius:8px;max-width:560px;width:100%;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    ${a.photo?`<img src="${esc(a.photo)}" style="width:100%;height:200px;object-fit:cover" onerror="this.style.display='none'">`:''}
+    <div style="padding:20px">
+      <div style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px">${esc(a.sec||'')} · ${esc(a.source||'')}</div>
+      <div style="font-family:'Instrument Serif',serif;font-size:20px;line-height:1.3;color:var(--ink);margin-bottom:10px">${esc(a.title||'')}</div>
+      ${a.preview?`<div style="font-size:13px;color:var(--ink3);line-height:1.7;margin-bottom:14px">${esc(a.preview)}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <button onclick="toggleCard(${i},event);$('card-modal').remove()" style="padding:8px 16px;background:var(--blue2);color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${portalSelected.has(${i})?'Quitar selección':'Seleccionar nota'}</button>
+        <button onclick="$('card-modal').remove()" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:4px;font-size:12px;cursor:pointer;font-family:inherit">Cerrar</button>
+        <a href="${esc(a.url)}" target="_blank" style="padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:4px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;color:var(--ink3)">Ver nota →</a>
+      </div>
+    </div>
+  </div>`;
+  m.onclick=(ev)=>{ if(ev.target===m) m.remove(); };
+  document.body.appendChild(m);
+}
+
+let _modalIdx = -1;
+function openPreview(i){
+  const a = portalArticles[i];
+  _modalIdx = i;
+  $('modal-title').textContent = a.title||'';
+  $('modal-sec').textContent = (a.source||'') + (a.sec&&a.sec!=='—'?' · '+a.sec:'') + (a.date?' · '+a.date:'');
+  const img=$('modal-img');
+  if(a.photo){ img.src=a.photo; img.style.display='block'; } else { img.style.display='none'; }
+  // Botón agregar
+  $('modal-add-btn').onclick=()=>{ addToColaFromModal(i); closeModalDirect(); };
+  $('modal-add-btn').textContent = portalSelected.has(i) ? '✓ Ya en cola' : '+ Agregar a la cola →';
+  // Texto
+  const previewEl = $('modal-text');
+  if(a.fullText){
+    previewEl.textContent = a.fullText;
+  } else if(a.preview){
+    previewEl.textContent = a.preview + '…
+
+Cargando nota completa…';
+    fetch(`/articulo?url=${encodeURIComponent(a.url)}`)
+      .then(r=>r.json())
+      .then(d=>{ if(d.text){ a.fullText=d.text; previewEl.textContent=d.text.slice(0,1000)+'…'; }})
+      .catch(()=>{ previewEl.textContent=a.preview+'…'; });
+  } else {
+    previewEl.textContent = 'Cargando…';
+    fetch(`/articulo?url=${encodeURIComponent(a.url)}`)
+      .then(r=>r.json())
+      .then(d=>{ if(d.text){ a.fullText=d.text; previewEl.textContent=d.text.slice(0,1000)+'…'; }})
+      .catch(()=>{ previewEl.textContent='No se pudo cargar la nota.'; });
+  }
+  $('modal-overlay').classList.add('on');
+  document.body.style.overflow='hidden';
+}
+function addToColaFromModal(i){
+  const a=portalArticles[i];
+  if(!cola.find(c=>c.url===a.url)){
+    cola.push({id:Date.now()+Math.random(),title:a.title,text:a.fullText||'',url:a.url,photo:a.photo||null});
+    renderCola();
+  }
+  portalSelected.add(i);
+  $('sel-n').textContent=portalSelected.size;
+  $('btn-pass').disabled=false;
+}
+function closeModal(e){ if(e.target===$('modal-overlay')) closeModalDirect(); }
+function closeModalDirect(){ $('modal-overlay').classList.remove('on'); document.body.style.overflow=''; }
 function clearSel(){ portalSelected.clear(); $('sel-n').textContent=0; $('btn-pass').disabled=true; renderCards(); }
 function passToRedactor(){
   const arts=[...portalSelected].map(i=>portalArticles[i]);
@@ -681,87 +886,134 @@ SITE_HEADERS = {
 
 # URLs a ignorar en el scraping
 IGNORE_PATTERNS = [
-    "wordpress.org","elementor.com","wp-login","wp-admin","wp-content",
-    "#","javascript:","mailto:","tel:","feed/","page/","category/",
-    "tag/","author/","wp-json","xmlrpc","comentarios","?s=","?p=",
-    "/servicios","/inicio","/noticias/#","/participacion",
+    "wordpress.org","elementor.com","wp-login","wp-admin","wp-content/themes",
+    "wp-content/plugins","#","javascript:","mailto:","tel:","feed/",
+    "page/","category/","tag/","author/","wp-json","xmlrpc",
+    "?s=","?p=","/servicios","/inicio","/participacion",
+    "google.com","facebook.com","twitter.com","instagram.com","youtube.com",
+    "wp-sitemap","privacy-policy","aviso-legal","contacto","sobre-nosotros",
 ]
 
-def is_valid_article_url(url: str, base: str) -> bool:
+def is_valid_article_url(url: str, base: str, min_dashes: int = 2) -> bool:
     if not url.startswith("http"): return False
     if not url.startswith(base): return False
     if any(p in url.lower() for p in IGNORE_PATTERNS): return False
-    slug = url.replace(base,"").strip("/")
-    # slug debe tener al menos 10 chars y contener guiones (nota real)
+    slug = url.replace(base,"").strip("/").split("?")[0]
     if len(slug) < 10: return False
-    if slug.count("-") < 2: return False
+    if slug.count("-") < min_dashes: return False
     return True
+
+def extract_wp_articles(soup, base: str, source_name: str, max_items: int = 20):
+    """Scraper genérico para sitios WordPress."""
+    articles = []
+    seen = set()
+    # Buscar en article tags primero
+    for article in soup.find_all(["article"], limit=40):
+        a_tag = article.find("a", href=True)
+        if not a_tag: continue
+        href = a_tag.get("href","")
+        if not href.startswith("http"): href = base + href
+        if not is_valid_article_url(href, base): continue
+        if href in seen: continue
+        seen.add(href)
+        # Título
+        heading = article.find(["h1","h2","h3","h4"])
+        title = heading.get_text(strip=True) if heading else a_tag.get_text(strip=True)
+        title = " ".join(title.split())
+        if not title or len(title) < 20 or len(title) > 250: continue
+        # Foto
+        img = article.find("img")
+        photo = None
+        if img:
+            for attr in ["src","data-src","data-lazy-src","data-original"]:
+                raw = img.get(attr,"")
+                if raw and not raw.startswith("data:") and len(raw) > 10:
+                    photo = raw if raw.startswith("http") else base + raw
+                    break
+        # Categoría
+        cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","tag","section","etiqueta"]))
+        sec = cat_el.get_text(strip=True).strip() if cat_el else "General"
+        if len(sec) > 30: sec = "General"
+        # Preview
+        p_el = article.find("p")
+        preview = " ".join(p_el.get_text(strip=True).split())[:160] if p_el else ""
+        articles.append({"url":href,"title":title,"sec":sec,"source":source_name,"photo":photo,"preview":preview})
+        if len(articles) >= max_items: break
+    return articles
 
 async def scrape_source(key: str):
     src = SOURCES[key]
     articles = []
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True, verify=False) as client:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, verify=False) as client:
             r = await client.get(src["url"], headers=SITE_HEADERS)
             soup = BeautifulSoup(r.text, "html.parser")
-            seen = set()
+            src_type = src.get("type","")
 
-            if key == "bariloche":
-                # WordPress: buscar en article tags y h2/h3 con links
-                candidates = []
-                # Buscar articles
-                for article in soup.find_all(["article","div"], class_=lambda c: c and any(x in " ".join(c) for x in ["post","entry","article","noticia","item"])):
-                    a = article.find("a", href=True)
-                    if not a: continue
-                    href = a.get("href","")
-                    if not is_valid_article_url(href, src["base"]): continue
-                    heading = article.find(["h1","h2","h3","h4"])
-                    title = heading.get_text(strip=True) if heading else a.get_text(strip=True)
-                    title = title.replace("\n"," ").strip()
-                    if not title or len(title)<20: continue
-                    # Fecha
-                    date_el = article.find(["time","span"], class_=lambda c: c and any(x in " ".join(c or []) for x in ["date","fecha","time","published"]))
-                    date_txt = date_el.get_text(strip=True) if date_el else ""
-                    # Categoría
-                    cat_el = article.find(class_=lambda c: c and any(x in " ".join(c or []) for x in ["cat","category","tag","categoria"]))
-                    sec = cat_el.get_text(strip=True) if cat_el else "Bariloche"
-                    if href not in seen:
-                        seen.add(href)
-                        # Foto
-                    img_el = article.find("img")
-                    photo = None
-                    if img_el:
-                        photo = img_el.get("src") or img_el.get("data-src") or img_el.get("data-lazy-src")
-                        if photo and photo.startswith("/"): photo = src["base"] + photo
-                    # Preview
-                    p_el = article.find("p")
-                    preview = p_el.get_text(strip=True)[:150] if p_el else ""
-                    candidates.append({"url":href,"title":title,"sec":sec,"source":src["name"],"date":date_txt,"photo":photo,"preview":preview})
-                # Si no encontró con articles, buscar todos los links válidos con heading dentro
+            # ── BARILOCHE INFORMA ──
+            if src_type == "bariloche":
+                candidates = extract_wp_articles(soup, src["base"], src["name"])
+                # Fallback: buscar todos los links válidos
                 if not candidates:
+                    seen = set()
                     for a in soup.find_all("a", href=True):
                         href = a.get("href","")
+                        if not href.startswith("http"): href = src["base"] + href
                         if not is_valid_article_url(href, src["base"]): continue
                         if href in seen: continue
                         seen.add(href)
                         heading = a.find(["h1","h2","h3","h4"])
-                        title = (heading or a).get_text(strip=True).replace("\n"," ").strip()
-                        if not title or len(title)<20 or len(title)>200: continue
-                        candidates.append({"url":href,"title":title,"sec":"Bariloche","source":src["name"],"date":"","photo":None,"preview":""})
+                        title = (heading or a).get_text(strip=True)
+                        title = " ".join(title.split())
+                        if not title or len(title) < 20 or len(title) > 250: continue
+                        candidates.append({"url":href,"title":title,"sec":"Bariloche","source":src["name"],"photo":None,"preview":""})
+                        if len(candidates) >= 20: break
                 articles = candidates[:20]
 
+            # ── WORDPRESS GENÉRICO (Quorum, Policía) ──
+            elif src_type == "wordpress":
+                articles = extract_wp_articles(soup, src["base"], src["name"])
+                # Si no encontró nada con article tags, buscar h2+a
+                if not articles:
+                    seen = set()
+                    for h in soup.find_all(["h2","h3"], limit=40):
+                        a_tag = h.find("a", href=True)
+                        if not a_tag: continue
+                        href = a_tag.get("href","")
+                        if not href.startswith("http"): href = src["base"] + href
+                        if not is_valid_article_url(href, src["base"], min_dashes=1): continue
+                        if href in seen: continue
+                        seen.add(href)
+                        title = " ".join(h.get_text(strip=True).split())
+                        if not title or len(title) < 15 or len(title) > 250: continue
+                        # Foto en el parent
+                        parent = h.find_parent(["div","li","section"])
+                        img = parent.find("img") if parent else None
+                        photo = None
+                        if img:
+                            for attr in ["src","data-src","data-lazy-src"]:
+                                raw = img.get(attr,"")
+                                if raw and not raw.startswith("data:") and len(raw) > 10:
+                                    photo = raw if raw.startswith("http") else src["base"] + raw
+                                    break
+                        p_el = parent.find("p") if parent else None
+                        preview = " ".join(p_el.get_text(strip=True).split())[:160] if p_el else ""
+                        articles.append({"url":href,"title":title,"sec":"Legislativa","source":src["name"],"photo":photo,"preview":preview})
+                        if len(articles) >= 20: break
+
+            # ── PRENSA RÍO NEGRO ──
             else:
-                # Prensa RN y Policía — scraper original
+                seen = set()
                 pat = src["pattern"]
-                links = soup.find_all("a", href=lambda h: h and (pat in h if pat else len(h) > 10))
+                links = soup.find_all("a", href=lambda h: h and pat in h)
                 for a in links:
                     href = a.get("href","")
-                    url = href if href.startswith("http") else src["base"]+href
-                    if url in seen or len(url)<20: continue
+                    url = href if href.startswith("http") else src["base"] + href
+                    if url in seen or len(url) < 20: continue
                     seen.add(url)
                     heading = a.find(["h2","h3","h4","h5"])
                     title = (heading or a).get_text(strip=True).replace("\n"," ").strip()
-                    if not title or len(title)<20 or len(title)>200: continue
+                    if not title or len(title) < 20 or len(title) > 200: continue
                     parent = a.find_parent(["article","div","li"])
                     sec = "—"
                     if parent:
@@ -779,11 +1031,10 @@ async def scrape_source(key: str):
                             photo = _up.unquote(_params.get("url", [""])[0])
                         elif raw_img.startswith("http") and "data:image" not in raw_img:
                             photo = raw_img
-                    # Preview
                     p_el = parent.find("p") if parent else None
                     preview = p_el.get_text(strip=True)[:150] if p_el else ""
                     articles.append({"url":url,"title":title,"sec":sec,"source":src["name"],"photo":photo,"preview":preview})
-                    if len(articles)>=20: break
+                    if len(articles) >= 20: break
 
     except Exception as e:
         print(f"scrape {key}: {e}")
@@ -796,7 +1047,8 @@ def root(): return HTML
 @app.get("/noticias/{source}")
 async def get_noticias(source: str):
     if source not in SOURCES: return {"articles":[],"error":"Fuente no encontrada"}
-    return {"articles": await scrape_source(source), "total": len(await scrape_source(source))}
+    articles = await scrape_source(source)
+    return {"articles": articles, "total": len(articles)}
 
 @app.get("/articulo")
 async def get_articulo(url: str):
