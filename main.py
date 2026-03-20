@@ -47,7 +47,7 @@ HEADERS = {
 }
 
 SOURCES = {
-    # Bariloche Informa — WordPress, scraping HTML directo (funcionaba antes)
+    # Bariloche Informa — WordPress, scraping HTML directo (FUNCIONANDO)
     "bariloche": {
         "name": "Bariloche Informa",
         "url":  "https://barilocheinforma.gob.ar/",
@@ -62,33 +62,33 @@ SOURCES = {
         "pattern": "/articulo/",
         "type": "prensa",
     },
-    # Policía RN — WordPress, intentar RSS como método más confiable
+    # Policía RN — WordPress (newsup theme), scraping HTML directo como Bariloche
     "policia": {
         "name": "Policía Río Negro",
-        "url":  "https://policia.rionegro.gov.ar/feed/",
+        "url":  "https://policia.rionegro.gov.ar/",
         "base": "https://policia.rionegro.gov.ar",
-        "type": "rss",
+        "type": "policia",
     },
-    # Quorum — WordPress estándar (funcionaba bien)
+    # Quorum — WordPress estándar (FUNCIONANDO)
     "quorum": {
         "name": "Quorum Legislativo",
         "url":  "https://quorum.legisrn.gov.ar/",
         "base": "https://quorum.legisrn.gov.ar",
         "type": "wordpress",
     },
-    # Neuquén Informa — RSS silvercoder
+    # Neuquén Informa — CMS propio, artículos en <article class="noticia-simple">
     "neuquen": {
         "name": "Neuquén Informa",
-        "url":  "https://www.neuqueninforma.gob.ar/rss/general",
+        "url":  "https://www.neuqueninforma.gob.ar/",
         "base": "https://www.neuqueninforma.gob.ar",
-        "type": "rss",
+        "type": "neuquen",
     },
-    # Ministerio Público RN — RSS WordPress
+    # Ministerio Público RN — Bootstrap CMS, novedades en .nota_completa
     "mpfiscal": {
         "name": "Min. Público RN",
-        "url":  "https://ministeriopublico.jusrionegro.gov.ar/feed/",
+        "url":  "https://ministeriopublico.jusrionegro.gov.ar/",
         "base": "https://ministeriopublico.jusrionegro.gov.ar",
-        "type": "rss",
+        "type": "mpfiscal",
     },
 }
 
@@ -972,6 +972,108 @@ def extract_barilocheopina(soup, base: str, source_name: str) -> list:
     return articles
 
 
+def extract_policia(soup, base: str, source_name: str) -> list:
+    """Policía RN — WordPress newsup theme. article.mg-posts-sec-post"""
+    articles = []
+    seen = set()
+    for article in soup.select("article.mg-posts-sec-post"):
+        link = article.select_one("h4.title a, h4.entry-title a")
+        if not link:
+            continue
+        href = link.get("href", "")
+        if not href or href in seen:
+            continue
+        if not re.search(r"/\d{4}/\d{2}/", href):
+            continue
+        seen.add(href)
+        title = " ".join(link.get_text(strip=True).split())
+        if not title or len(title) < 15:
+            continue
+        cat_el = article.select_one(".mg-blog-category a")
+        sec = cat_el.get_text(strip=True) if cat_el else "Policía RN"
+        photo = None
+        thumb = article.select_one("[class*='mg-post-thumb'][style]")
+        if thumb:
+            m = re.search(r"url\(['\"]?([^'\"\)\s]+)['\"]?\)", thumb.get("style", ""))
+            if m:
+                photo = m.group(1)
+        p_el = article.select_one(".mg-content p")
+        preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
+        articles.append({"url": href, "title": title, "sec": sec, "source": source_name, "photo": photo, "preview": preview})
+        if len(articles) >= 20:
+            break
+    return articles
+
+
+def extract_neuquen(soup, base: str, source_name: str) -> list:
+    """Neuquén Informa — CMS propio. article.noticia-simple"""
+    articles = []
+    seen = set()
+    for article in soup.select("article.noticia-simple"):
+        link = article.select_one("a[href*='/noticias/']")
+        if not link:
+            continue
+        href = link.get("href", "")
+        if not href:
+            continue
+        url = href if href.startswith("http") else base + href
+        if url in seen:
+            continue
+        seen.add(url)
+        title_el = article.select_one(".div-info h2") or article.select_one("h2")
+        title = " ".join(title_el.get_text(strip=True).split()) if title_el else ""
+        if not title or len(title) < 10:
+            continue
+        cat_el = article.select_one(".categoria a")
+        sec = cat_el.get_text(strip=True) if cat_el else "General"
+        photo = None
+        img = article.select_one("img.imgdatasrc")
+        if img:
+            src = img.get("src", "")
+            if src and "pixel.webp" not in src and src.startswith("http"):
+                photo = src
+        h3_el = article.select_one(".div-info h3")
+        preview = h3_el.get_text(strip=True) if h3_el else ""
+        articles.append({"url": url, "title": title, "sec": sec, "source": source_name, "photo": photo, "preview": preview})
+        if len(articles) >= 20:
+            break
+    return articles
+
+
+def extract_mpfiscal(soup, base: str, source_name: str) -> list:
+    """Ministerio Público RN — Bootstrap. .nota_completa"""
+    articles = []
+    seen = set()
+    for nota in soup.select(".nota_completa"):
+        link = nota.select_one("a[href*='/nota/']")
+        if not link:
+            continue
+        href = link.get("href", "")
+        if not href:
+            continue
+        url = href if href.startswith("http") else base + "/" + href.lstrip("/")
+        if url in seen:
+            continue
+        seen.add(url)
+        title_el = nota.select_one(".title-nota")
+        title = " ".join(title_el.get_text(strip=True).split()) if title_el else ""
+        if not title or len(title) < 10:
+            continue
+        fecha_el = nota.select_one(".title-fecha")
+        sec = fecha_el.get_text(strip=True) if fecha_el else "Río Negro"
+        photo = None
+        img = nota.select_one("img[src*='/archivos/']")
+        if img:
+            src = img.get("src", "")
+            photo = src if src.startswith("http") else base + src if src else None
+        p_el = nota.select_one(".title-bajada p")
+        preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
+        articles.append({"url": url, "title": title, "sec": sec, "source": source_name, "photo": photo, "preview": preview})
+        if len(articles) >= 15:
+            break
+    return articles
+
+
 async def scrape_source(key: str) -> list:
     """
     Scraper principal. Selecciona la estrategia según el tipo de fuente.
@@ -1029,6 +1131,21 @@ async def scrape_source(key: str) -> list:
                     preview = " ".join(p_el.get_text(strip=True).split())[:180] if p_el else ""
                     articles.append({"url":url,"title":title,"sec":sec,"source":src["name"],"photo":photo,"preview":preview})
                     if len(articles) >= 20: break
+
+            # ── POLICÍA RN (WordPress newsup) ───────────────────────────────
+            elif src_type == "policia":
+                soup = BeautifulSoup(r.text, "html.parser")
+                articles = extract_policia(soup, src["base"], src["name"])
+
+            # ── NEUQUÉN INFORMA (CMS propio) ─────────────────────────────────
+            elif src_type == "neuquen":
+                soup = BeautifulSoup(r.text, "html.parser")
+                articles = extract_neuquen(soup, src["base"], src["name"])
+
+            # ── MINISTERIO PÚBLICO RN (Bootstrap CMS) ────────────────────────
+            elif src_type == "mpfiscal":
+                soup = BeautifulSoup(r.text, "html.parser")
+                articles = extract_mpfiscal(soup, src["base"], src["name"])
 
             # ── BARILOCHE OPINA (URLs /noticias/YYYY/MM/DD/ID) ───────────────
             elif src_type == "barilocheopina":
