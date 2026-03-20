@@ -47,14 +47,14 @@ HEADERS = {
 }
 
 SOURCES = {
-    # RSS — confiable, incluye fotos, nunca bloquea
+    # Bariloche Informa — WordPress, scraping HTML directo (funcionaba antes)
     "bariloche": {
         "name": "Bariloche Informa",
-        "url":  "https://barilocheinforma.gob.ar/feed/",
+        "url":  "https://barilocheinforma.gob.ar/",
         "base": "https://barilocheinforma.gob.ar",
-        "type": "rss",
+        "type": "wordpress",
     },
-    # Silvercoder CMS — mismo que Diario ENE
+    # Prensa RN — silvercoder CMS
     "prensa": {
         "name": "Prensa Río Negro",
         "url":  "https://prensa.rionegro.gov.ar/busqueda/articulo?q=",
@@ -62,28 +62,28 @@ SOURCES = {
         "pattern": "/articulo/",
         "type": "prensa",
     },
-    # WordPress — feed RSS como método principal
+    # Policía RN — WordPress, intentar RSS como método más confiable
     "policia": {
         "name": "Policía Río Negro",
         "url":  "https://policia.rionegro.gov.ar/feed/",
         "base": "https://policia.rionegro.gov.ar",
         "type": "rss",
     },
-    # WordPress estándar
+    # Quorum — WordPress estándar (funcionaba bien)
     "quorum": {
         "name": "Quorum Legislativo",
         "url":  "https://quorum.legisrn.gov.ar/",
         "base": "https://quorum.legisrn.gov.ar",
         "type": "wordpress",
     },
-    # Neuquén Informa — mismo CMS que Prensa RN
+    # Neuquén Informa — RSS silvercoder
     "neuquen": {
         "name": "Neuquén Informa",
         "url":  "https://www.neuqueninforma.gob.ar/rss/general",
         "base": "https://www.neuqueninforma.gob.ar",
         "type": "rss",
     },
-    # Ministerio Público RN — WordPress con RSS
+    # Ministerio Público RN — RSS WordPress
     "mpfiscal": {
         "name": "Min. Público RN",
         "url":  "https://ministeriopublico.jusrionegro.gov.ar/feed/",
